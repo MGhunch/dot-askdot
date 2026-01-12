@@ -1,27 +1,34 @@
 /**
- * Ask Dot - Frontend Application
- * Handles PIN authentication, conversation flow, and UI interactions
+ * Ask Dot - v2
+ * Clean logic model: Parse → Apply Defaults → Execute → Render
  */
 
 // ===== CONFIGURATION =====
 const API_BASE = 'https://dot-remote-api.up.railway.app';
+const PROXY_BASE = 'https://dot-proxy.up.railway.app';
 
-// PIN Database - just Michael for now
-// Later: move to Airtable via API
+// Key clients shown in picker (rest go to "Other")
+const KEY_CLIENTS = ['ONE', 'ONB', 'ONS', 'SKY', 'TOW'];
+
+// PIN Database
 const PINS = {
     '9871': { name: 'Michael', fullName: 'Michael Goldthorpe', client: 'ALL', clientName: 'Hunch', mode: 'hunch' }
 };
 
-// Data loaded from API
-let allClients = [];
-let allJobs = [];
-
-// Key clients to show in main picker
-const KEY_CLIENTS = ['ONE', 'SKY', 'TOW', 'FIS'];
+// ===== KEYWORDS =====
+const KEYWORDS = {
+    DUE: ['due', 'overdue', 'deadline', "what's next", 'next', 'urgent'],
+    FIND: ["what's on", 'show', 'check', 'find', 'jobs'],
+    UPDATE: ['update'],
+    TRACKER: ['tracker', 'spend', 'budget'],
+    HELP: ['help', 'what can dot do', 'about dot']
+};
 
 // ===== STATE =====
 let enteredPin = '';
 let currentUser = null;
+let allClients = [];
+let allJobs = [];
 
 // ===== DOM ELEMENTS =====
 const $ = (id) => document.getElementById(id);
@@ -66,26 +73,551 @@ async function loadJobs() {
     }
 }
 
-function getJobsForClient(clientCode) {
-    return allJobs.filter(j => j.clientCode === clientCode);
+// ===== QUERY PARSER =====
+
+/**
+ * Parse a query into intent and modifiers
+ * Returns: { coreRequest, modifiers, searchTerms }
+ */
+function parseQuery(query) {
+    const q = query.toLowerCase().trim();
+    
+    // Result object
+    const result = {
+        coreRequest: null,
+        modifiers: {
+            client: null,
+            status: null,
+            withClient: null,
+            dateRange: null
+        },
+        searchTerms: [],
+        raw: query
+    };
+    
+    // 1. Detect client
+    const clientMatch = allClients.find(c => 
+        q.includes(c.name.toLowerCase()) || 
+        q.includes(c.code.toLowerCase())
+    );
+    if (clientMatch) {
+        result.modifiers.client = clientMatch.code;
+    }
+    
+    // 2. Detect core request (order matters - check most specific first)
+    if (matchesKeywords(q, KEYWORDS.HELP)) {
+        result.coreRequest = 'HELP';
+    } else if (matchesKeywords(q, KEYWORDS.TRACKER)) {
+        result.coreRequest = 'TRACKER';
+    } else if (matchesKeywords(q, KEYWORDS.UPDATE)) {
+        result.coreRequest = 'UPDATE';
+    } else if (matchesKeywords(q, KEYWORDS.DUE)) {
+        result.coreRequest = 'DUE';
+        // Check for date range modifiers
+        if (q.includes('today') || q.includes('now')) {
+            result.modifiers.dateRange = 'today';
+        } else if (q.includes('this week') || q.includes('week')) {
+            result.modifiers.dateRange = 'week';
+        } else if (q.includes('next')) {
+            result.modifiers.dateRange = 'next';
+        } else {
+            result.modifiers.dateRange = 'today'; // default
+        }
+    } else if (matchesKeywords(q, KEYWORDS.FIND) || clientMatch) {
+        result.coreRequest = 'FIND';
+        // Extract search terms if we have a client
+        if (clientMatch) {
+            result.searchTerms = extractSearchTerms(q, clientMatch);
+        }
+    }
+    
+    // 3. Check for status modifiers
+    if (q.includes('on hold') || q.includes('hold')) {
+        result.modifiers.status = 'On Hold';
+    } else if (q.includes('incoming') || q.includes('new')) {
+        result.modifiers.status = 'Incoming';
+    } else if (q.includes('completed') || q.includes('done')) {
+        result.modifiers.status = 'Completed';
+    }
+    
+    // 4. Check for "with client" modifier
+    if (q.includes('with client') || q.includes('with them') || q.includes('waiting')) {
+        result.modifiers.withClient = true;
+    }
+    
+    // 5. If still no core request but has search-like terms, assume FIND
+    if (!result.coreRequest && q.length > 2) {
+        result.coreRequest = 'FIND';
+        result.searchTerms = extractSearchTermsRaw(q);
+    }
+    
+    return result;
+}
+
+function matchesKeywords(query, keywords) {
+    return keywords.some(kw => query.includes(kw));
+}
+
+// Words to ignore when searching
+const STOP_WORDS = ['the', 'a', 'an', 'job', 'project', 'about', 'for', 'with', 'that', 'one', 
+    'whats', "what's", 'where', 'is', 'are', 'can', 'you', 'find', 'show', 'me', 'i', 'need', 
+    'looking', 'check', 'on', 'how', 'hows', "how's", 'going', 'doing'];
+
+function extractSearchTerms(query, clientMatch) {
+    let q = query.toLowerCase();
+    // Remove client name and code
+    q = q.replace(clientMatch.name.toLowerCase(), '');
+    q = q.replace(clientMatch.code.toLowerCase(), '');
+    return extractSearchTermsRaw(q);
+}
+
+function extractSearchTermsRaw(query) {
+    const words = query.split(/\s+/).filter(word => 
+        word.length > 2 && !STOP_WORDS.includes(word)
+    );
+    return words;
+}
+
+// ===== APPLY DEFAULTS =====
+
+/**
+ * Apply default filters for missing modifiers
+ */
+function applyDefaults(parsed) {
+    // Default status: In Progress
+    if (!parsed.modifiers.status) {
+        parsed.modifiers.status = 'In Progress';
+    }
+    
+    // Default withClient: false (show jobs with us)
+    if (parsed.modifiers.withClient === null) {
+        parsed.modifiers.withClient = false;
+    }
+    
+    // Default dateRange for DUE: today (includes overdue)
+    if (parsed.coreRequest === 'DUE' && !parsed.modifiers.dateRange) {
+        parsed.modifiers.dateRange = 'today';
+    }
+    
+    return parsed;
+}
+
+// ===== JOB FILTERING =====
+
+/**
+ * Single function to filter jobs based on modifiers
+ */
+function getFilteredJobs(modifiers, options = {}) {
+    let jobs = [...allJobs];
+    
+    // Filter by client
+    if (modifiers.client) {
+        jobs = jobs.filter(j => j.clientCode === modifiers.client);
+    }
+    
+    // Filter by status (unless includeAllStatuses)
+    if (!options.includeAllStatuses && modifiers.status) {
+        jobs = jobs.filter(j => j.status === modifiers.status);
+    }
+    
+    // Filter by withClient
+    if (modifiers.withClient === true) {
+        jobs = jobs.filter(j => j.withClient === true);
+    } else if (modifiers.withClient === false) {
+        jobs = jobs.filter(j => !j.withClient);
+    }
+    
+    // Filter by date range
+    if (modifiers.dateRange) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        jobs = jobs.filter(j => {
+            if (!j.updateDue) return false;
+            const dueDate = new Date(j.updateDue);
+            dueDate.setHours(0, 0, 0, 0);
+            
+            switch (modifiers.dateRange) {
+                case 'today':
+                    // Today + overdue
+                    return dueDate <= today;
+                case 'week':
+                    // Within 7 days + overdue
+                    const weekFromNow = new Date(today);
+                    weekFromNow.setDate(weekFromNow.getDate() + 7);
+                    return dueDate <= weekFromNow;
+                case 'next':
+                    // Just get all with due dates, we'll sort and take first
+                    return true;
+                default:
+                    return true;
+            }
+        });
+    }
+    
+    // Sort by due date (soonest first, overdue at top)
+    jobs.sort((a, b) => {
+        if (!a.updateDue) return 1;
+        if (!b.updateDue) return -1;
+        return new Date(a.updateDue) - new Date(b.updateDue);
+    });
+    
+    return jobs;
+}
+
+/**
+ * Search jobs by terms within a client
+ */
+function searchJobs(modifiers, searchTerms) {
+    let jobs = getFilteredJobs({ client: modifiers.client }, { includeAllStatuses: true });
+    
+    if (searchTerms.length === 0) {
+        return jobs;
+    }
+    
+    // Score and filter
+    const scored = jobs.map(job => ({
+        job,
+        score: scoreJobMatch(job, searchTerms)
+    })).filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+    
+    return scored.map(item => item.job);
+}
+
+function scoreJobMatch(job, searchTerms) {
+    const jobName = (job.jobName || '').toLowerCase();
+    const jobDesc = (job.description || '').toLowerCase();
+    const jobUpdate = (job.update || '').toLowerCase();
+    
+    let score = 0;
+    for (const term of searchTerms) {
+        if (jobName.includes(term)) score += 10;
+        if (jobDesc.includes(term)) score += 5;
+        if (jobUpdate.includes(term)) score += 2;
+    }
+    return score;
+}
+
+// ===== EXECUTE =====
+
+/**
+ * Main entry point - process a question
+ */
+function processQuestion(question) {
+    addThinkingDots();
+    
+    setTimeout(() => {
+        removeThinkingDots();
+        
+        // Check easter eggs first
+        const easterEgg = checkEasterEggs(question);
+        if (easterEgg === 'EASTER_WISHES') {
+            renderResponse({
+                text: "So you did read the prompt. Sorry to disappoint, best wish I can do is hope you're smiling. 😊",
+                prompts: ['Check a client', "What's due?"]
+            });
+            conversationArea.scrollTop = conversationArea.scrollHeight;
+            return;
+        }
+        
+        // 1. Parse
+        let parsed = parseQuery(question);
+        
+        // 2. Apply defaults
+        parsed = applyDefaults(parsed);
+        
+        // 3. Execute based on core request
+        switch (parsed.coreRequest) {
+            case 'DUE':
+                executeDue(parsed);
+                break;
+            case 'FIND':
+                executeFind(parsed);
+                break;
+            case 'UPDATE':
+                executeUpdate(parsed);
+                break;
+            case 'TRACKER':
+                executeTracker(parsed);
+                break;
+            case 'HELP':
+                executeHelp();
+                break;
+            default:
+                // No match - future: ask Claude
+                executeHelp();
+        }
+        
+        conversationArea.scrollTop = conversationArea.scrollHeight;
+    }, 600);
+}
+
+// ===== EXECUTORS =====
+
+function executeDue(parsed) {
+    const jobs = getFilteredJobs(parsed.modifiers);
+    const client = parsed.modifiers.client 
+        ? allClients.find(c => c.code === parsed.modifiers.client)
+        : null;
+    
+    // Special case: "next" means just show the single next job
+    if (parsed.modifiers.dateRange === 'next') {
+        if (jobs.length === 0) {
+            renderResponse({
+                text: client 
+                    ? `No upcoming deadlines for ${client.name}.`
+                    : 'No upcoming deadlines.',
+                prompts: ['Check a client', "What's due today?"]
+            });
+        } else {
+            const nextJob = jobs[0];
+            renderResponse({
+                text: `Next up is <strong>${nextJob.jobNumber} — ${nextJob.jobName}</strong>, due ${formatDueDate(nextJob.updateDue)}.`,
+                jobs: [nextJob],
+                prompts: client 
+                    ? ['Due today', `More ${client.name} jobs`]
+                    : ['Due today', 'Check a client']
+            });
+        }
+        return;
+    }
+    
+    // Standard due response
+    const dateLabel = parsed.modifiers.dateRange === 'week' ? 'this week' : 'today';
+    
+    if (jobs.length === 0) {
+        renderResponse({
+            text: client 
+                ? `Nothing due ${dateLabel} for ${client.name}! 🎉`
+                : `Nothing due ${dateLabel}! 🎉`,
+            prompts: ['Due this week', 'On hold?', 'With client?']
+        });
+    } else {
+        renderResponse({
+            text: client
+                ? `${jobs.length} job${jobs.length === 1 ? '' : 's'} due ${dateLabel} for ${client.name}:`
+                : `${jobs.length} job${jobs.length === 1 ? '' : 's'} due ${dateLabel}:`,
+            jobs: jobs,
+            prompts: ['Due this week', 'On hold?', 'With client?']
+        });
+    }
+}
+
+function executeFind(parsed) {
+    // No client specified - show client picker
+    if (!parsed.modifiers.client) {
+        renderClientPicker();
+        return;
+    }
+    
+    const client = allClients.find(c => c.code === parsed.modifiers.client);
+    
+    // Has search terms - fuzzy search
+    if (parsed.searchTerms.length > 0) {
+        const jobs = searchJobs(parsed.modifiers, parsed.searchTerms);
+        
+        if (jobs.length === 0) {
+            renderResponse({
+                text: `Couldn't find a ${client?.name || parsed.modifiers.client} job matching that.`,
+                prompts: [`All ${client?.name} jobs`, 'Check another client']
+            });
+        } else if (jobs.length === 1) {
+            renderResponse({
+                text: `I think you mean <strong>${jobs[0].jobNumber} — ${jobs[0].jobName}</strong>?`,
+                jobs: [jobs[0]],
+                prompts: [`All ${client?.name} jobs`, 'Check another client']
+            });
+        } else {
+            renderResponse({
+                text: `Found ${jobs.length} ${client?.name} jobs that might match:`,
+                jobs: jobs.slice(0, 3),
+                prompts: [`All ${client?.name} jobs`, 'Check another client']
+            });
+        }
+        return;
+    }
+    
+    // No search terms - show all jobs for client
+    const jobs = getFilteredJobs(parsed.modifiers);
+    
+    if (jobs.length === 0) {
+        renderResponse({
+            text: `No active jobs for ${client?.name || parsed.modifiers.client}.`,
+            prompts: ['On hold?', 'With client?', 'Check another client']
+        });
+    } else {
+        renderResponse({
+            text: `Here's what's on for ${client?.name || parsed.modifiers.client}:`,
+            jobs: jobs,
+            prompts: ['On hold?', 'With client?', 'Check another client']
+        });
+    }
+}
+
+function executeUpdate(parsed) {
+    // If we have a client, help them find the job
+    if (parsed.modifiers.client) {
+        const client = allClients.find(c => c.code === parsed.modifiers.client);
+        renderResponse({
+            text: `Which ${client?.name} job do you want to update?`,
+            prompts: [`Show ${client?.name} jobs`, 'Check another client']
+        });
+    } else {
+        renderResponse({
+            text: "Which job do you want to update? Tell me the client and I'll help you find it.",
+            prompts: ['Check a client']
+        });
+    }
+}
+
+function executeTracker(parsed) {
+    renderResponse({
+        text: "Tracker is coming soon! 🚀",
+        prompts: ['Check a client', "What's due?"]
+    });
+}
+
+function executeHelp() {
+    renderResponse({
+        text: `I'm Dot, I'm here to help you:
+            <br><br>• Check on jobs and client work.
+            <br>• See what's due or coming up.
+            <br>• Easily find info on any job.
+            <br><br>I'm a robot, not a genie, so go easy.`,
+        prompts: ['Check a client', "What's due?", 'Grant three wishes']
+    });
+}
+
+// ===== RENDERERS =====
+
+function renderResponse({ text, jobs = [], prompts = [] }) {
+    const response = document.createElement('div');
+    response.className = 'dot-response fade-in';
+    
+    let html = `<p class="dot-text">${text}</p>`;
+    
+    if (jobs.length > 0) {
+        html += '<div class="job-cards">';
+        jobs.forEach((job, i) => {
+            html += createJobCard(job, i);
+        });
+        html += '</div>';
+    }
+    
+    if (prompts.length > 0) {
+        html += '<div class="smart-prompts">';
+        prompts.forEach(prompt => {
+            html += `<button class="smart-prompt" data-question="${prompt}">${prompt}</button>`;
+        });
+        html += '</div>';
+    }
+    
+    response.innerHTML = html;
+    conversationArea.appendChild(response);
+    bindDynamicElements(response);
+}
+
+function renderClientPicker() {
+    const allClientsWithCounts = getClientsWithJobCounts();
+    const keyClients = allClientsWithCounts.filter(c => KEY_CLIENTS.includes(c.code));
+    const hasOtherClients = allClientsWithCounts.some(c => !KEY_CLIENTS.includes(c.code));
+    
+    const response = document.createElement('div');
+    response.className = 'dot-response fade-in';
+    response.innerHTML = `
+        <p class="dot-text">Which client?</p>
+        <div class="client-cards">
+            ${keyClients.map(c => `
+                <div class="client-card" data-client="${c.code}">
+                    <div>
+                        <div class="client-name">${c.name}</div>
+                        <div class="client-count">${c.jobCount} active job${c.jobCount === 1 ? '' : 's'}</div>
+                    </div>
+                    <span class="card-chevron">›</span>
+                </div>
+            `).join('')}
+            ${hasOtherClients ? `
+                <div class="client-card other-clients-btn">
+                    <div>
+                        <div class="client-name">Other clients</div>
+                    </div>
+                    <span class="card-chevron">›</span>
+                </div>
+            ` : ''}
+        </div>
+        <div class="smart-prompts">
+            <button class="smart-prompt" data-question="What's due today?">What's due?</button>
+        </div>
+    `;
+    conversationArea.appendChild(response);
+    bindDynamicElements(response);
 }
 
 function getClientsWithJobCounts() {
     return allClients.map(c => ({
         ...c,
-        jobCount: allJobs.filter(j => j.clientCode === c.code).length
+        jobCount: allJobs.filter(j => j.clientCode === c.code && j.status === 'In Progress').length
     })).filter(c => c.jobCount > 0);
 }
+
+// ===== JOB CARD =====
+
+function createJobCard(job, index) {
+    const id = `job-${Date.now()}-${index}`;
+    const dueDate = formatDueDate(job.updateDue);
+    const lastUpdated = formatLastUpdated(job.lastUpdated);
+    
+    const clockIcon = `<svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
+    const withClientIcon = `<svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>`;
+    
+    return `
+        <div class="job-card" id="${id}">
+            <div class="job-card-header" data-job-id="${id}">
+                <div class="job-info">
+                    <div class="job-title">${job.jobNumber} — ${job.jobName}</div>
+                    <div class="job-meta">
+                        ${clockIcon} ${dueDate}
+                        ${job.withClient ? `<span class="job-meta-dot"></span>${withClientIcon} With Client` : ''}
+                    </div>
+                </div>
+                <span class="card-chevron">›</span>
+            </div>
+            <div class="job-details">
+                <textarea class="job-update-input" data-job="${job.jobNumber}" placeholder="Add an update...">${job.update || ''}</textarea>
+                <div class="job-detail-row">
+                    <span class="job-detail-label">Owner</span>
+                    <span class="job-detail-value">${job.projectOwner || 'TBC'}</span>
+                </div>
+                <div class="job-detail-row">
+                    <span class="job-detail-label">Updated</span>
+                    <span class="job-detail-value">${lastUpdated}</span>
+                </div>
+                <div class="job-actions">
+                    ${job.channelUrl ? `<a href="${job.channelUrl}" target="_blank" class="job-action-btn secondary">Teams →</a>` : ''}
+                    <button class="job-action-btn primary" data-job="${job.jobNumber}" onclick="submitUpdate('${job.jobNumber}', this)">Update →</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ===== HELPERS =====
 
 function formatDueDate(isoDate) {
     if (!isoDate) return 'TBC';
     const date = new Date(isoDate);
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    if (date.toDateString() === today.toDateString()) return 'Today';
-    if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+    const dateOnly = new Date(date);
+    dateOnly.setHours(0, 0, 0, 0);
+    
+    if (dateOnly.getTime() === today.getTime()) return 'Today';
+    if (dateOnly.getTime() === tomorrow.getTime()) return 'Tomorrow';
+    if (dateOnly < today) return 'Overdue';
     
     return date.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' });
 }
@@ -103,180 +635,166 @@ function formatLastUpdated(isoDate) {
     return `${Math.floor(diffDays / 7)} weeks ago`;
 }
 
-// Words to ignore when searching
-const STOP_WORDS = ['the', 'a', 'an', 'job', 'project', 'about', 'for', 'with', 'that', 'one', 'whats', "what's", 'where', 'is', 'are', 'can', 'you', 'find', 'show', 'me', 'i', 'need', 'looking'];
+// ===== UPDATE SUBMISSION =====
 
-function extractSearchTerms(query, clientMatch) {
-    // Remove client name and code from query
-    let q = query.toLowerCase();
-    q = q.replace(clientMatch.name.toLowerCase(), '');
-    q = q.replace(clientMatch.code.toLowerCase(), '');
+async function submitUpdate(jobNumber, btn) {
+    const card = btn.closest('.job-card');
+    const textarea = card.querySelector('.job-update-input');
+    const message = textarea.value.trim();
     
-    // Split into words and filter out stop words
-    const words = q.split(/\s+/).filter(word => 
-        word.length > 2 && !STOP_WORDS.includes(word)
-    );
-    
-    return words;
-}
-
-function scoreJobMatch(job, searchTerms) {
-    const jobName = job.jobName.toLowerCase();
-    const jobDesc = (job.description || '').toLowerCase();
-    const jobUpdate = (job.update || '').toLowerCase();
-    
-    let score = 0;
-    
-    for (const term of searchTerms) {
-        // Exact match in job name scores highest
-        if (jobName.includes(term)) {
-            score += 10;
-        }
-        // Match in description
-        if (jobDesc.includes(term)) {
-            score += 5;
-        }
-        // Match in update
-        if (jobUpdate.includes(term)) {
-            score += 2;
-        }
-    }
-    
-    return score;
-}
-
-function searchJobsForClient(clientCode, searchTerms) {
-    const clientJobs = getJobsForClient(clientCode);
-    const client = allClients.find(c => c.code === clientCode);
-    
-    // Score all jobs
-    const scoredJobs = clientJobs.map(job => ({
-        job,
-        score: scoreJobMatch(job, searchTerms)
-    })).filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score);
-    
-    if (scoredJobs.length === 0) {
-        const response = document.createElement('div');
-        response.className = 'dot-response fade-in';
-        response.innerHTML = `
-            <p class="dot-text">I couldn't find a ${client?.name || clientCode} job matching that. Here's everything for ${client?.name || clientCode}:</p>
-            <div class="job-cards">
-                ${clientJobs.slice(0, 5).map((job, i) => createJobCard(job, i)).join('')}
-            </div>
-            <div class="smart-prompts">
-                <button class="smart-prompt" data-question="Check a client">Try another client</button>
-            </div>
-        `;
-        conversationArea.appendChild(response);
-        bindDynamicElements(response);
+    if (!message) {
+        textarea.focus();
         return;
     }
     
-    if (scoredJobs.length === 1 || scoredJobs[0].score > scoredJobs[1]?.score * 1.5) {
-        // Clear winner
-        const bestJob = scoredJobs[0].job;
-        const response = document.createElement('div');
-        response.className = 'dot-response fade-in';
-        response.innerHTML = `
-            <p class="dot-text">I think you mean <strong>${bestJob.jobNumber} — ${bestJob.jobName}</strong>?</p>
-            <div class="job-cards">
-                ${createJobCard(bestJob, 0)}
-            </div>
-            <div class="smart-prompts">
-                <button class="smart-prompt" data-question="${client?.name || clientCode} jobs">See all ${client?.name || clientCode} jobs</button>
-            </div>
-        `;
-        conversationArea.appendChild(response);
-        bindDynamicElements(response);
-    } else {
-        // Multiple matches
-        const topMatches = scoredJobs.slice(0, 3);
-        const response = document.createElement('div');
-        response.className = 'dot-response fade-in';
-        response.innerHTML = `
-            <p class="dot-text">I found a few ${client?.name || clientCode} jobs that might match:</p>
-            <div class="job-cards">
-                ${topMatches.map((item, i) => createJobCard(item.job, i)).join('')}
-            </div>
-            <div class="smart-prompts">
-                <button class="smart-prompt" data-question="${client?.name || clientCode} jobs">See all ${client?.name || clientCode} jobs</button>
-            </div>
-        `;
-        conversationArea.appendChild(response);
-        bindDynamicElements(response);
+    // Optimistic UI - update card immediately
+    const originalText = textarea.value;
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    
+    try {
+        const response = await fetch(`${PROXY_BASE}/proxy/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                clientCode: jobNumber.split(' ')[0],
+                jobNumber: jobNumber,
+                message: message
+            })
+        });
+        
+        if (!response.ok) throw new Error('Update failed');
+        
+        btn.textContent = 'Done ✓';
+        btn.classList.add('success');
+        
+        // Update local data optimistically
+        const job = allJobs.find(j => j.jobNumber === jobNumber);
+        if (job) {
+            job.update = message;
+            job.lastUpdated = new Date().toISOString();
+        }
+        
+        setTimeout(() => {
+            btn.textContent = 'Update →';
+            btn.classList.remove('success');
+            btn.disabled = false;
+        }, 2000);
+        
+    } catch (e) {
+        console.error('Update failed:', e);
+        btn.textContent = 'Failed';
+        textarea.value = originalText;
+        setTimeout(() => {
+            btn.textContent = 'Update →';
+            btn.disabled = false;
+        }, 2000);
     }
 }
 
-function searchAllJobs(query) {
-    // Extract search terms (remove stop words)
-    const words = query.toLowerCase().split(/\s+/).filter(word => 
-        word.length > 2 && !STOP_WORDS.includes(word)
-    );
+// ===== UI FUNCTIONS =====
+
+function addUserMessage(text) {
+    const msg = document.createElement('div');
+    msg.className = 'user-message fade-in';
+    msg.textContent = text;
+    conversationArea.appendChild(msg);
+    conversationArea.scrollTop = conversationArea.scrollHeight;
+}
+
+function addThinkingDots() {
+    const dots = document.createElement('div');
+    dots.className = 'thinking-dots';
+    dots.id = 'currentThinking';
+    dots.innerHTML = `
+        <div class="thinking-dot"></div>
+        <div class="thinking-dot"></div>
+        <div class="thinking-dot"></div>
+    `;
+    conversationArea.appendChild(dots);
+    conversationArea.scrollTop = conversationArea.scrollHeight;
+}
+
+function removeThinkingDots() {
+    const dots = $('currentThinking');
+    if (dots) dots.remove();
+}
+
+function toggleJobCard(id) {
+    $(id).classList.toggle('expanded');
+}
+
+// ===== EVENT BINDING =====
+
+function bindDynamicElements(container) {
+    // Smart prompts
+    container.querySelectorAll('.smart-prompt').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const question = btn.dataset.question;
+            addUserMessage(question);
+            processQuestion(question);
+        });
+    });
     
-    if (words.length === 0) {
-        showFindJob();
-        return;
-    }
+    // Client cards
+    container.querySelectorAll('.client-card:not(.other-clients-btn)').forEach(card => {
+        card.addEventListener('click', () => {
+            const clientCode = card.dataset.client;
+            const client = allClients.find(c => c.code === clientCode);
+            addUserMessage(client?.name || clientCode);
+            processQuestion(client?.name || clientCode);
+        });
+    });
     
-    // Score all jobs
-    const scoredJobs = allJobs.map(job => ({
-        job,
-        score: scoreJobMatch(job, words)
-    })).filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score);
+    // Other clients button
+    container.querySelectorAll('.other-clients-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            addUserMessage('Other clients');
+            showOtherClients();
+        });
+    });
     
-    if (scoredJobs.length === 0) {
+    // Job card headers
+    container.querySelectorAll('.job-card-header').forEach(header => {
+        header.addEventListener('click', () => {
+            toggleJobCard(header.dataset.jobId);
+        });
+    });
+}
+
+function showOtherClients() {
+    addThinkingDots();
+    setTimeout(() => {
+        removeThinkingDots();
+        const otherClients = getClientsWithJobCounts().filter(c => !KEY_CLIENTS.includes(c.code));
+        
         const response = document.createElement('div');
         response.className = 'dot-response fade-in';
         response.innerHTML = `
-            <p class="dot-text">I couldn't find a job matching that. Try including the client name, like "the Tower job about cross-sell".</p>
+            <p class="dot-text">Other clients:</p>
+            <div class="client-cards">
+                ${otherClients.map(c => `
+                    <div class="client-card" data-client="${c.code}">
+                        <div>
+                            <div class="client-name">${c.name}</div>
+                            <div class="client-count">${c.jobCount} active job${c.jobCount === 1 ? '' : 's'}</div>
+                        </div>
+                        <span class="card-chevron">›</span>
+                    </div>
+                `).join('')}
+            </div>
             <div class="smart-prompts">
-                <button class="smart-prompt" data-question="Check a client">Check a client</button>
-                <button class="smart-prompt" data-question="What's due today?">What's due today?</button>
+                <button class="smart-prompt" data-question="Check a client">Back to main clients</button>
             </div>
         `;
         conversationArea.appendChild(response);
         bindDynamicElements(response);
-        return;
-    }
-    
-    if (scoredJobs.length === 1 || scoredJobs[0].score > scoredJobs[1]?.score * 1.5) {
-        // Clear winner
-        const bestJob = scoredJobs[0].job;
-        const response = document.createElement('div');
-        response.className = 'dot-response fade-in';
-        response.innerHTML = `
-            <p class="dot-text">I think you mean <strong>${bestJob.jobNumber} — ${bestJob.jobName}</strong>?</p>
-            <div class="job-cards">
-                ${createJobCard(bestJob, 0)}
-            </div>
-            <div class="smart-prompts">
-                <button class="smart-prompt" data-question="Find a job">Find another job</button>
-            </div>
-        `;
-        conversationArea.appendChild(response);
-        bindDynamicElements(response);
-    } else {
-        // Multiple matches
-        const topMatches = scoredJobs.slice(0, 3);
-        const response = document.createElement('div');
-        response.className = 'dot-response fade-in';
-        response.innerHTML = `
-            <p class="dot-text">I found a few jobs that might match:</p>
-            <div class="job-cards">
-                ${topMatches.map((item, i) => createJobCard(item.job, i)).join('')}
-            </div>
-            <div class="smart-prompts">
-                <button class="smart-prompt" data-question="Find a job">Find another job</button>
-            </div>
-        `;
-        conversationArea.appendChild(response);
-        bindDynamicElements(response);
-    }
+        conversationArea.scrollTop = conversationArea.scrollHeight;
+    }, 400);
 }
 
 // ===== PIN FUNCTIONS =====
+
 function enterPin(digit) {
     if (enteredPin.length >= 4) return;
     enteredPin += digit;
@@ -322,21 +840,8 @@ function checkPin() {
 function unlockApp() {
     pinScreen.classList.add('hidden');
     homeInput.placeholder = `What's cooking ${currentUser.name}?`;
-    updateExamplesForUser();
-    // Load data after unlock
     loadClients();
     loadJobs();
-}
-
-function updateExamplesForUser() {
-    if (currentUser.mode === 'client') {
-        examples.innerHTML = `
-            <button class="example-btn" data-question="Show me my jobs">Show me my jobs</button>
-            <button class="example-btn" data-question="What's overdue?">What's overdue?</button>
-            <button class="example-btn" data-question="What can Dot do?">What can Dot do?</button>
-        `;
-        bindExampleButtons();
-    }
 }
 
 function signOut() {
@@ -357,7 +862,35 @@ function checkSession() {
     }
 }
 
-// ===== MENU FUNCTIONS =====
+// ===== NAVIGATION =====
+
+function goHome() {
+    homeContent.classList.remove('hidden');
+    conversationView.classList.remove('visible');
+    homeInput.value = '';
+    conversationArea.innerHTML = '';
+    loadClients();
+    loadJobs();
+}
+
+function startConversation() {
+    const question = homeInput.value.trim() || 'Check a client';
+    homeContent.classList.add('hidden');
+    conversationView.classList.add('visible');
+    addUserMessage(question);
+    processQuestion(question);
+}
+
+function continueConversation() {
+    const question = chatInput.value.trim();
+    if (!question) return;
+    addUserMessage(question);
+    chatInput.value = '';
+    processQuestion(question);
+}
+
+// ===== MENU =====
+
 function toggleMenu() {
     hamburger.classList.toggle('open');
     dropdown.classList.toggle('open');
@@ -377,20 +910,33 @@ function menuAction(action) {
     switch(action) {
         case 'wip':
             if (isMobile) {
-                showDesktopPrompt('WIP');
+                homeContent.classList.add('hidden');
+                conversationView.classList.add('visible');
+                renderResponse({
+                    text: 'WIP works best on a bigger screen. Try it on desktop!',
+                    prompts: ['Check a client', "What's due?"]
+                });
             } else {
                 window.open('https://dot.hunch.co.nz/todo.html', '_blank');
             }
             break;
         case 'tracker':
             if (isMobile) {
-                showDesktopPrompt('Tracker');
+                homeContent.classList.add('hidden');
+                conversationView.classList.add('visible');
+                renderResponse({
+                    text: 'Tracker works best on a bigger screen. Try it on desktop!',
+                    prompts: ['Check a client', "What's due?"]
+                });
             } else {
                 window.open('https://dot.hunch.co.nz/tracker.html', '_blank');
             }
             break;
         case 'about':
-            askQuestion('What can Dot do?');
+            homeContent.classList.add('hidden');
+            conversationView.classList.add('visible');
+            addUserMessage('What can Dot do?');
+            processQuestion('What can Dot do?');
             break;
         case 'signout':
             signOut();
@@ -398,664 +944,20 @@ function menuAction(action) {
     }
 }
 
-function showDesktopPrompt(tool) {
-    // Show conversation view with desktop message
-    homeContent.classList.add('hidden');
-    conversationView.classList.add('visible');
-    
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <p class="dot-text">${tool} works best on a bigger screen. Try it on desktop!</p>
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="Find a job">Find a job</button>
-            <button class="smart-prompt" data-question="Check a client">Check a client</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
+// ===== EASTER EGGS =====
 
-// ===== CONVERSATION FUNCTIONS =====
-function goHome() {
-    homeContent.classList.remove('hidden');
-    conversationView.classList.remove('visible');
-    homeInput.value = '';
-    conversationArea.innerHTML = '';
-    // Refresh data when going home
-    loadClients();
-    loadJobs();
-}
-
-function askQuestion(text) {
-    homeInput.value = text;
-    startConversation();
-}
-
-function startConversation() {
-    const question = homeInput.value.trim() || 'Show me WIP';
-    homeContent.classList.add('hidden');
-    conversationView.classList.add('visible');
-    addUserMessage(question);
-    setTimeout(() => processQuestion(question), 100);
-}
-
-function continueConversation() {
-    const question = chatInput.value.trim();
-    if (!question) return;
-    addUserMessage(question);
-    chatInput.value = '';
-    setTimeout(() => processQuestion(question), 100);
-}
-
-function addUserMessage(text) {
-    const msg = document.createElement('div');
-    msg.className = 'user-message fade-in';
-    msg.textContent = text;
-    conversationArea.appendChild(msg);
-    conversationArea.scrollTop = conversationArea.scrollHeight;
-}
-
-function addThinkingDots() {
-    const dots = document.createElement('div');
-    dots.className = 'thinking-dots';
-    dots.id = 'currentThinking';
-    dots.innerHTML = `
-        <div class="thinking-dot"></div>
-        <div class="thinking-dot"></div>
-        <div class="thinking-dot"></div>
-    `;
-    conversationArea.appendChild(dots);
-    conversationArea.scrollTop = conversationArea.scrollHeight;
-}
-
-function removeThinkingDots() {
-    const dots = $('currentThinking');
-    if (dots) dots.remove();
-}
-
-function processQuestion(question) {
-    const q = question.toLowerCase();
-    addThinkingDots();
-    
-    setTimeout(() => {
-        removeThinkingDots();
-        
-        // Check for client name in query
-        const clientMatch = allClients.find(c => 
-            q.includes(c.name.toLowerCase()) || 
-            q.includes(c.code.toLowerCase())
-        );
-        
-        if (currentUser && currentUser.mode === 'client') {
-            // Client mode - restricted view
-            const clientCode = currentUser.client === 'ONS' ? 'ONE' : currentUser.client;
-            
-            if (q.includes('overdue') || q.includes('late') || q.includes('behind')) {
-                showOverdueJobs(clientCode);
-            } else if ((q.includes('due') || q.includes('deadline')) && q.includes('today')) {
-                showDueToday(clientCode);
-            } else if (q.includes('next') || q.includes('coming up')) {
-                showDueNext(clientCode);
-            } else if (q.includes('wip') || q.includes('jobs') || q.includes('my jobs')) {
-                showJobsForClient(clientCode);
-            } else if (q.includes('what can dot do') || q.includes('about dot') || q.includes('help')) {
-                showAboutDot();
-            } else {
-                // Default for client mode - show their jobs
-                showJobsForClient(clientCode);
-            }
-        } else {
-            // Hunch mode - full access
-            
-            // 1. Specific requests first
-            if ((q.includes('due') || q.includes('deadline')) && q.includes('today')) {
-                showDueToday();
-            } else if ((q.includes('next') && (q.includes('due') || q.includes('deadline') || q.includes('what'))) || q.includes('coming up')) {
-                showDueNext();
-            } else if (q.includes('overdue') || q.includes('late') || q.includes('behind')) {
-                if (clientMatch) {
-                    showOverdueJobs(clientMatch.code);
-                } else {
-                    showClientPicker('overdue');
-                }
-            } else if (q.includes('wip')) {
-                if (clientMatch) {
-                    showJobsForClient(clientMatch.code);
-                } else {
-                    showClientPicker();
-                }
-            } else if (q.includes('find a job') || q.includes('find job') || q.includes('search')) {
-                showFindJob();
-            } else if (q.includes('check a client') || q.includes('check client')) {
-                showClientPicker();
-            } else if (q.includes('three wishes') || q.includes('3 wishes') || q.includes('genie')) {
-                showThreeWishes();
-            } else if (q.includes('what can dot do') || q.includes('about dot') || q.includes('help')) {
-                showAboutDot();
-            } else if (q.includes('tracker')) {
-                showTrackerComingSoon();
-            } 
-            // 2. Client name found - try to find a specific job or show all
-            else if (clientMatch) {
-                const searchTerms = extractSearchTerms(q, clientMatch);
-                if (searchTerms.length > 0) {
-                    searchJobsForClient(clientMatch.code, searchTerms);
-                } else {
-                    showJobsForClient(clientMatch.code);
-                }
-            }
-            // 3. No client but maybe searching for a job by description
-            else if (q.includes('job') || q.includes('project') || q.includes('the one about') || q.includes('that one')) {
-                searchAllJobs(q);
-            }
-            // 4. Nothing matched
-            else {
-                showDefaultResponse(question);
-            }
-        }
-        
-        conversationArea.scrollTop = conversationArea.scrollHeight;
-    }, 800);
-}
-
-// ===== RESPONSE GENERATORS =====
-function showClientPicker(filter = '') {
-    const allClientsWithCounts = currentUser.mode === 'hunch' ? getClientsWithJobCounts() : 
-        getClientsWithJobCounts().filter(c => c.code === currentUser.client);
-    
-    // Split into key clients and others
-    const keyClients = allClientsWithCounts.filter(c => KEY_CLIENTS.includes(c.code));
-    const hasOtherClients = allClientsWithCounts.some(c => !KEY_CLIENTS.includes(c.code));
-    
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <p class="dot-text">Which client?</p>
-        <div class="client-cards">
-            ${keyClients.map(c => `
-                <div class="client-card" data-client="${c.code}" data-filter="${filter}">
-                    <div>
-                        <div class="client-name">${c.name}</div>
-                        <div class="client-count">${c.jobCount} active job${c.jobCount === 1 ? '' : 's'}</div>
-                    </div>
-                    <span class="card-chevron">›</span>
-                </div>
-            `).join('')}
-            ${hasOtherClients ? `
-                <div class="client-card other-clients-btn" data-filter="${filter}">
-                    <div>
-                        <div class="client-name">Other clients</div>
-                    </div>
-                    <span class="card-chevron">›</span>
-                </div>
-            ` : ''}
-        </div>
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="What's due today?">What's due today?</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
-
-function selectClient(code, filter) {
-    const client = allClients.find(c => c.code === code);
-    addUserMessage(client ? client.name : code);
-    addThinkingDots();
-    
-    setTimeout(() => {
-        removeThinkingDots();
-        if (filter === 'overdue') {
-            showOverdueJobs(code);
-        } else {
-            showJobsForClient(code);
-        }
-        conversationArea.scrollTop = conversationArea.scrollHeight;
-    }, 600);
-}
-
-function showJobsForClient(code) {
-    const clientJobs = getJobsForClient(code);
-    const client = allClients.find(c => c.code === code);
-    
-    if (clientJobs.length === 0) {
-        showEmptyState(client?.name || code);
-        return;
+// Add to parseQuery - check for easter eggs
+function checkEasterEggs(query) {
+    const q = query.toLowerCase();
+    if (q.includes('three wishes') || q.includes('3 wishes') || q.includes('genie')) {
+        return 'EASTER_WISHES';
     }
-    
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <p class="dot-text">Here's what's on for ${client?.name || code}:</p>
-        <div class="job-cards">
-            ${clientJobs.map((job, i) => createJobCard(job, i)).join('')}
-        </div>
-        <div class="smart-prompts">
-            ${currentUser.mode === 'hunch' ? '<button class="smart-prompt" data-question="WIP for another client">Another client</button>' : ''}
-            <button class="smart-prompt" data-question="What's with client?">What's with client?</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
-
-function showOverdueJobs(code) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const clientJobs = getJobsForClient(code).filter(j => {
-        if (j.withClient) return true;
-        if (!j.updateDue) return false;
-        const dueDate = new Date(j.updateDue);
-        return dueDate <= today;
-    });
-    
-    const client = allClients.find(c => c.code === code);
-    
-    if (clientJobs.length === 0) {
-        const response = document.createElement('div');
-        response.className = 'dot-response fade-in';
-        response.innerHTML = `
-            <p class="dot-text">Nothing overdue for ${client?.name || code}! 🎉</p>
-            <div class="smart-prompts">
-                <button class="smart-prompt" data-question="Show all jobs">Show all jobs</button>
-            </div>
-        `;
-        conversationArea.appendChild(response);
-        bindDynamicElements(response);
-        return;
-    }
-    
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <p class="dot-text">Here's what needs attention for ${client?.name || code}:</p>
-        <div class="job-cards">
-            ${clientJobs.map((job, i) => createJobCard(job, i)).join('')}
-        </div>
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="Show all jobs">Show all jobs</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
-
-function showDueToday(clientCode = null) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    // Get jobs due today
-    let dueTodayJobs = allJobs.filter(j => {
-        if (!j.updateDue) return false;
-        const dueDate = new Date(j.updateDue);
-        dueDate.setHours(0, 0, 0, 0);
-        return dueDate.getTime() === today.getTime();
-    });
-    
-    // Filter by client if specified
-    if (clientCode) {
-        dueTodayJobs = dueTodayJobs.filter(j => j.clientCode === clientCode);
-    }
-    
-    if (dueTodayJobs.length === 0) {
-        const response = document.createElement('div');
-        response.className = 'dot-response fade-in';
-        response.innerHTML = `
-            <p class="dot-text">Nothing due today! 🎉</p>
-            <div class="smart-prompts">
-                <button class="smart-prompt" data-question="What's due next?">What's due next?</button>
-                <button class="smart-prompt" data-question="Show me WIP">Show me WIP</button>
-            </div>
-        `;
-        conversationArea.appendChild(response);
-        bindDynamicElements(response);
-        return;
-    }
-    
-    const firstJob = dueTodayJobs[0];
-    const restJobs = dueTodayJobs.slice(1);
-    
-    let html = `
-        <p class="dot-text"><strong>${firstJob.jobNumber} — ${firstJob.jobName}</strong> is due today.</p>
-        <div class="job-cards">
-            ${createJobCard(firstJob, 0)}
-        </div>
-    `;
-    
-    if (restJobs.length > 0) {
-        html += `
-            <p class="dot-text" style="margin-top: 16px;">But there's ${restJobs.length > 1 ? 'a few more' : 'one more'} behind the same eightball:</p>
-            <ul class="also-due-list">
-                ${restJobs.map(j => `<li><strong>${j.jobNumber}</strong> — ${j.jobName}</li>`).join('')}
-            </ul>
-        `;
-    }
-    
-    html += `
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="What's due next?">What's due next?</button>
-            <button class="smart-prompt" data-question="Show me WIP">Show me WIP</button>
-        </div>
-    `;
-    
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = html;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
-
-function showDueNext(clientCode = null) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // Get jobs with due dates in the future, sorted by date
-    let upcomingJobs = allJobs.filter(j => {
-        if (!j.updateDue) return false;
-        const dueDate = new Date(j.updateDue);
-        dueDate.setHours(0, 0, 0, 0);
-        return dueDate >= today;
-    });
-    
-    // Filter by client if specified
-    if (clientCode) {
-        upcomingJobs = upcomingJobs.filter(j => j.clientCode === clientCode);
-    }
-    
-    // Sort by due date
-    upcomingJobs.sort((a, b) => new Date(a.updateDue) - new Date(b.updateDue));
-    
-    if (upcomingJobs.length === 0) {
-        const response = document.createElement('div');
-        response.className = 'dot-response fade-in';
-        response.innerHTML = `
-            <p class="dot-text">No upcoming deadlines in the system.</p>
-            <div class="smart-prompts">
-                <button class="smart-prompt" data-question="Show me WIP">Show me WIP</button>
-            </div>
-        `;
-        conversationArea.appendChild(response);
-        bindDynamicElements(response);
-        return;
-    }
-    
-    const nextJob = upcomingJobs[0];
-    const dueDate = formatDueDate(nextJob.updateDue);
-    
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <p class="dot-text">Next up is <strong>${nextJob.jobNumber} — ${nextJob.jobName}</strong>, due ${dueDate}.</p>
-        <div class="job-cards">
-            ${createJobCard(nextJob, 0)}
-        </div>
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="What's due today?">Due today</button>
-            <button class="smart-prompt" data-question="Show me WIP">Show me WIP</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
-
-function createJobCard(job, index) {
-    const id = `job-${Date.now()}-${index}`;
-    const dueDate = formatDueDate(job.updateDue);
-    const lastUpdated = formatLastUpdated(job.lastUpdated);
-    
-    // SVG icons
-    const clockIcon = `<svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
-    
-    const withClientIcon = `<svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>`;
-    
-    return `
-        <div class="job-card" id="${id}">
-            <div class="job-card-header" data-job-id="${id}">
-                <div class="job-info">
-                    <div class="job-title">${job.jobNumber} — ${job.jobName}</div>
-                    <div class="job-meta">
-                        ${clockIcon} ${dueDate}
-                        ${job.withClient ? `<span class="job-meta-dot"></span>${withClientIcon} With Client` : ''}
-                    </div>
-                </div>
-                <span class="card-chevron">›</span>
-            </div>
-            <div class="job-details">
-                <textarea class="job-update-input" data-job="${job.jobNumber}" placeholder="Add an update...">${job.update || ''}</textarea>
-                <div class="job-detail-row">
-                    <span class="job-detail-label">Owner</span>
-                    <span class="job-detail-value">${job.projectOwner || 'TBC'}</span>
-                </div>
-                <div class="job-detail-row">
-                    <span class="job-detail-label">Updated</span>
-                    <span class="job-detail-value">${lastUpdated}</span>
-                </div>
-                <div class="job-actions">
-                    ${job.channelUrl ? `<a href="${job.channelUrl}" target="_blank" class="job-action-btn secondary">Open in Teams →</a>` : ''}
-                    ${currentUser.mode === 'hunch' ? `<button class="job-action-btn primary" data-job="${job.jobNumber}" onclick="submitUpdate('${job.jobNumber}', this)">Update →</button>` : ''}
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function toggleJobCard(id) {
-    $(id).classList.toggle('expanded');
-}
-
-async function submitUpdate(jobNumber, btn) {
-    const card = btn.closest('.job-card');
-    const textarea = card.querySelector('.job-update-input');
-    const message = textarea.value.trim();
-    
-    if (!message) {
-        textarea.focus();
-        return;
-    }
-    
-    btn.disabled = true;
-    btn.textContent = 'Saving...';
-    
-    try {
-        // POST to proxy which sends to N8N
-        const response = await fetch('https://dot-proxy.up.railway.app/proxy/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                clientCode: jobNumber.split(' ')[0],
-                jobNumber: jobNumber,
-                message: message
-            })
-        });
-        
-        if (!response.ok) throw new Error('Update failed');
-        
-        btn.textContent = 'Done ✓';
-        btn.classList.add('success');
-        
-        setTimeout(() => {
-            btn.textContent = 'Update →';
-            btn.classList.remove('success');
-            btn.disabled = false;
-        }, 2000);
-        
-    } catch (e) {
-        console.error('Update failed:', e);
-        btn.textContent = 'Failed';
-        setTimeout(() => {
-            btn.textContent = 'Update →';
-            btn.disabled = false;
-        }, 2000);
-    }
-}
-
-function showEmptyState(clientName) {
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <div class="empty-state">
-            <div class="empty-icon">📭</div>
-            <p class="empty-text">No active jobs found for ${clientName}.</p>
-        </div>
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="Show all clients">Try another client</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
-
-function showAboutDot() {
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <p class="dot-text">I'm Dot, I'm here to help you:</p>
-        <p class="dot-text" style="margin-bottom: 8px;">
-            • Check on jobs and client work.<br>
-            • See what's due or coming up.<br>
-            • Easily find info on any job.
-        </p>
-        <p class="dot-text">I'm a robot, not a genie, so go easy.</p>
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="Find a job">Find a job</button>
-            <button class="smart-prompt" data-question="Check a client">Check a client</button>
-            <button class="smart-prompt" data-question="Grant three wishes">Grant three wishes</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
-
-function showTrackerComingSoon() {
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <p class="dot-text">The Tracker is coming soon! 🚀</p>
-        <p class="dot-text">For now, I can help you with WIP and project updates.</p>
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="Check a client">Check a client</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
-
-function showFindJob() {
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <p class="dot-text">What job are you looking for? Try typing a job number like <strong>SKY 014</strong> or tell me the client and I'll show you what's on.</p>
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="Check a client">Check a client</button>
-            <button class="smart-prompt" data-question="What's due today?">What's due today?</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
-
-function showOtherClientsPrompt(filter = '') {
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <p class="dot-text">Which client are you looking for?</p>
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="Check a client">Back to main clients</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-    
-    // Store filter for when they type the client name
-    sessionStorage.setItem('otherClientFilter', filter);
-}
-
-function showThreeWishes() {
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <p class="dot-text">So you did read the prompt. Sorry to disappoint, best wish I can do is hope you're smiling. 😊</p>
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="Find a job">Find a job</button>
-            <button class="smart-prompt" data-question="Check a client">Check a client</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
-
-function showDefaultResponse(question) {
-    const response = document.createElement('div');
-    response.className = 'dot-response fade-in';
-    response.innerHTML = `
-        <p class="dot-text">I'm not sure how to help with that yet. Try asking about:</p>
-        <div class="smart-prompts">
-            <button class="smart-prompt" data-question="Find a job">Find a job</button>
-            <button class="smart-prompt" data-question="Check a client">Check a client</button>
-            <button class="smart-prompt" data-question="What can Dot do?">What can Dot do?</button>
-        </div>
-    `;
-    conversationArea.appendChild(response);
-    bindDynamicElements(response);
-}
-
-function askFromChat(text) {
-    chatInput.value = text;
-    continueConversation();
-}
-
-// ===== EVENT BINDING =====
-function bindDynamicElements(container) {
-    // Bind smart prompts
-    container.querySelectorAll('.smart-prompt').forEach(btn => {
-        btn.addEventListener('click', () => {
-            askFromChat(btn.dataset.question);
-        });
-    });
-    
-    // Bind client cards
-    container.querySelectorAll('.client-card:not(.other-clients-btn)').forEach(card => {
-        card.addEventListener('click', () => {
-            selectClient(card.dataset.client, card.dataset.filter);
-        });
-    });
-    
-    // Bind other clients button
-    container.querySelectorAll('.other-clients-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            addUserMessage('Other clients');
-            addThinkingDots();
-            setTimeout(() => {
-                removeThinkingDots();
-                showOtherClientsPrompt(btn.dataset.filter);
-                conversationArea.scrollTop = conversationArea.scrollHeight;
-            }, 400);
-        });
-    });
-    
-    // Bind job card headers
-    container.querySelectorAll('.job-card-header').forEach(header => {
-        header.addEventListener('click', () => {
-            toggleJobCard(header.dataset.jobId);
-        });
-    });
-}
-
-function bindExampleButtons() {
-    $$('.example-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            askQuestion(btn.dataset.question);
-        });
-    });
+    return null;
 }
 
 // ===== INITIALIZATION =====
+
 function init() {
-    // Check for existing session
     checkSession();
     
     // PIN keypad
@@ -1095,8 +997,12 @@ function init() {
     $('chat-send').addEventListener('click', continueConversation);
     
     // Example buttons
-    bindExampleButtons();
+    $$('.example-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            homeInput.value = btn.dataset.question;
+            startConversation();
+        });
+    });
 }
 
-// Start the app
 document.addEventListener('DOMContentLoaded', init);
