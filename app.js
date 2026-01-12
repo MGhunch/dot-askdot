@@ -16,6 +16,9 @@ const PINS = {
 let allClients = [];
 let allJobs = [];
 
+// Key clients to show in main picker
+const KEY_CLIENTS = ['ONE', 'SKY', 'TOW', 'FIS'];
+
 // ===== STATE =====
 let enteredPin = '';
 let currentUser = null;
@@ -419,6 +422,9 @@ function goHome() {
     conversationView.classList.remove('visible');
     homeInput.value = '';
     conversationArea.innerHTML = '';
+    // Refresh data when going home
+    loadClients();
+    loadJobs();
 }
 
 function askQuestion(text) {
@@ -555,15 +561,19 @@ function processQuestion(question) {
 
 // ===== RESPONSE GENERATORS =====
 function showClientPicker(filter = '') {
-    const clients = currentUser.mode === 'hunch' ? getClientsWithJobCounts() : 
+    const allClientsWithCounts = currentUser.mode === 'hunch' ? getClientsWithJobCounts() : 
         getClientsWithJobCounts().filter(c => c.code === currentUser.client);
+    
+    // Split into key clients and others
+    const keyClients = allClientsWithCounts.filter(c => KEY_CLIENTS.includes(c.code));
+    const hasOtherClients = allClientsWithCounts.some(c => !KEY_CLIENTS.includes(c.code));
     
     const response = document.createElement('div');
     response.className = 'dot-response fade-in';
     response.innerHTML = `
         <p class="dot-text">Which client?</p>
         <div class="client-cards">
-            ${clients.map(c => `
+            ${keyClients.map(c => `
                 <div class="client-card" data-client="${c.code}" data-filter="${filter}">
                     <div>
                         <div class="client-name">${c.name}</div>
@@ -572,10 +582,17 @@ function showClientPicker(filter = '') {
                     <span class="card-chevron">›</span>
                 </div>
             `).join('')}
+            ${hasOtherClients ? `
+                <div class="client-card other-clients-btn" data-filter="${filter}">
+                    <div>
+                        <div class="client-name">Other clients</div>
+                    </div>
+                    <span class="card-chevron">›</span>
+                </div>
+            ` : ''}
         </div>
         <div class="smart-prompts">
-            <button class="smart-prompt" data-question="Show all jobs">Show all</button>
-            <button class="smart-prompt" data-question="Just overdue">Just overdue</button>
+            <button class="smart-prompt" data-question="What's due today?">What's due today?</button>
         </div>
     `;
     conversationArea.appendChild(response);
@@ -941,6 +958,22 @@ function showFindJob() {
     bindDynamicElements(response);
 }
 
+function showOtherClientsPrompt(filter = '') {
+    const response = document.createElement('div');
+    response.className = 'dot-response fade-in';
+    response.innerHTML = `
+        <p class="dot-text">Which client are you looking for?</p>
+        <div class="smart-prompts">
+            <button class="smart-prompt" data-question="Check a client">Back to main clients</button>
+        </div>
+    `;
+    conversationArea.appendChild(response);
+    bindDynamicElements(response);
+    
+    // Store filter for when they type the client name
+    sessionStorage.setItem('otherClientFilter', filter);
+}
+
 function showThreeWishes() {
     const response = document.createElement('div');
     response.className = 'dot-response fade-in';
@@ -985,9 +1018,22 @@ function bindDynamicElements(container) {
     });
     
     // Bind client cards
-    container.querySelectorAll('.client-card').forEach(card => {
+    container.querySelectorAll('.client-card:not(.other-clients-btn)').forEach(card => {
         card.addEventListener('click', () => {
             selectClient(card.dataset.client, card.dataset.filter);
+        });
+    });
+    
+    // Bind other clients button
+    container.querySelectorAll('.other-clients-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            addUserMessage('Other clients');
+            addThinkingDots();
+            setTimeout(() => {
+                removeThinkingDots();
+                showOtherClientsPrompt(btn.dataset.filter);
+                conversationArea.scrollTop = conversationArea.scrollHeight;
+            }, 400);
         });
     });
     
