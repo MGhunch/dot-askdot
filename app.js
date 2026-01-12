@@ -4,42 +4,17 @@
  */
 
 // ===== CONFIGURATION =====
-const API_BASE = ''; // Empty for same-origin, or set to your Railway URL
+const API_BASE = 'https://dot-remote-api.up.railway.app';
 
 // PIN Database - just Michael for now
-// Later: move to Airtable via app.py
+// Later: move to Airtable via API
 const PINS = {
     '9871': { name: 'Michael', fullName: 'Michael Goldthorpe', client: 'ALL', clientName: 'Hunch', mode: 'hunch' }
 };
 
-// Sample data - will be replaced with Airtable API calls
-const ALL_CLIENTS = [
-    { code: 'SKY', name: 'Sky', jobCount: 8 },
-    { code: 'ONE', name: 'One NZ', jobCount: 12 },
-    { code: 'TOW', name: 'Tower', jobCount: 4 },
-    { code: 'FIS', name: 'Fisher Funds', jobCount: 3 }
-];
-
-const SAMPLE_JOBS = {
-    'SKY': [
-        { number: 'SKY 014', name: 'Brand Refresh', stage: 'Craft', due: 'Wed 15', status: 'In Progress', update: 'Layouts approved, moving to production.', owner: 'Aimee Mitchell', lastUpdated: '2 days ago' },
-        { number: 'SKY 016', name: 'Q1 Campaign', stage: 'Clarify', due: 'Mon 20', status: 'In Progress', update: 'Awaiting brief clarification on target audience.', owner: 'Maja Lee', lastUpdated: '1 day ago' },
-        { number: 'SKY 017', name: 'Social Templates', stage: 'Deliver', due: 'Today', status: 'With Client', update: 'Final files sent for approval.', owner: 'Mikaila Watts', lastUpdated: 'Today' }
-    ],
-    'ONE': [
-        { number: 'ONE 083', name: 'Simplification Phase 2', stage: 'Craft', due: 'Fri 17', status: 'In Progress', update: 'Working through form redesigns.', owner: 'Anita Campbell', lastUpdated: '3 days ago' },
-        { number: 'ONE 085', name: 'Business Comms', stage: 'Refine', due: 'Thu 16', status: 'In Progress', update: 'Round 2 amends in progress.', owner: 'Naomi Reynolds', lastUpdated: '1 day ago' },
-        { number: 'ONE 090', name: 'App Launch', stage: 'Clarify', due: 'Mon 27', status: 'Incoming', update: 'Brief received, scheduling kick-off.', owner: 'Jess Downey', lastUpdated: 'Today' }
-    ],
-    'TOW': [
-        { number: 'TOW 083', name: 'Claims Process', stage: 'Refine', due: 'Wed 15', status: 'In Progress', update: 'Client reviewing round 1.', owner: 'Paige Buckland', lastUpdated: '4 days ago' },
-        { number: 'TOW 087', name: 'Policy Docs', stage: 'Craft', due: 'Fri 24', status: 'In Progress', update: 'First drafts underway.', owner: 'Paige Buckland', lastUpdated: '2 days ago' }
-    ],
-    'FIS': [
-        { number: 'FIS 007', name: 'Annual Report', stage: 'Deliver', due: 'Mon 13', status: 'With Client', update: 'Final proof sent.', owner: 'Jade Jordan', lastUpdated: 'Today' },
-        { number: 'FIS 023', name: 'Fund Factsheets', stage: 'Craft', due: 'Fri 17', status: 'In Progress', update: 'Updating Q4 data.', owner: 'Jade Jordan', lastUpdated: '1 day ago' }
-    ]
-};
+// Data loaded from API
+let allClients = [];
+let allJobs = [];
 
 // ===== STATE =====
 let enteredPin = '';
@@ -60,6 +35,70 @@ const dropdown = $('dropdown');
 const overlay = $('overlay');
 const hamburger = $('hamburger');
 const examples = $('examples');
+
+// ===== API FUNCTIONS =====
+async function loadClients() {
+    try {
+        const response = await fetch(`${API_BASE}/clients`);
+        const data = await response.json();
+        allClients = data.map(c => ({
+            code: c.code,
+            name: c.name
+        }));
+        console.log('Loaded clients:', allClients.length);
+    } catch (e) {
+        console.error('Failed to load clients:', e);
+        allClients = [];
+    }
+}
+
+async function loadJobs() {
+    try {
+        const response = await fetch(`${API_BASE}/jobs/all`);
+        allJobs = await response.json();
+        console.log('Loaded jobs:', allJobs.length);
+    } catch (e) {
+        console.error('Failed to load jobs:', e);
+        allJobs = [];
+    }
+}
+
+function getJobsForClient(clientCode) {
+    return allJobs.filter(j => j.clientCode === clientCode);
+}
+
+function getClientsWithJobCounts() {
+    return allClients.map(c => ({
+        ...c,
+        jobCount: allJobs.filter(j => j.clientCode === c.code).length
+    })).filter(c => c.jobCount > 0);
+}
+
+function formatDueDate(isoDate) {
+    if (!isoDate) return 'TBC';
+    const date = new Date(isoDate);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+    
+    return date.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+function formatLastUpdated(isoDate) {
+    if (!isoDate) return 'No updates';
+    const date = new Date(isoDate);
+    const now = new Date();
+    const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 14) return '1 week ago';
+    return `${Math.floor(diffDays / 7)} weeks ago`;
+}
 
 // ===== PIN FUNCTIONS =====
 function enterPin(digit) {
@@ -108,6 +147,9 @@ function unlockApp() {
     pinScreen.classList.add('hidden');
     homeInput.placeholder = `What's cooking ${currentUser.name}?`;
     updateExamplesForUser();
+    // Load data after unlock
+    loadClients();
+    loadJobs();
 }
 
 function updateExamplesForUser() {
@@ -270,13 +312,13 @@ function processQuestion(question) {
         }
         
         conversationArea.scrollTop = conversationArea.scrollHeight;
-    }, 1000);
+    }, 800);
 }
 
 // ===== RESPONSE GENERATORS =====
 function showClientPicker(filter = '') {
-    const clients = currentUser.mode === 'hunch' ? ALL_CLIENTS : 
-        ALL_CLIENTS.filter(c => c.code === currentUser.client);
+    const clients = currentUser.mode === 'hunch' ? getClientsWithJobCounts() : 
+        getClientsWithJobCounts().filter(c => c.code === currentUser.client);
     
     const response = document.createElement('div');
     response.className = 'dot-response fade-in';
@@ -287,7 +329,7 @@ function showClientPicker(filter = '') {
                 <div class="client-card" data-client="${c.code}" data-filter="${filter}">
                     <div>
                         <div class="client-name">${c.name}</div>
-                        <div class="client-count">${c.jobCount} active jobs</div>
+                        <div class="client-count">${c.jobCount} active job${c.jobCount === 1 ? '' : 's'}</div>
                     </div>
                     <span class="card-chevron">›</span>
                 </div>
@@ -303,8 +345,8 @@ function showClientPicker(filter = '') {
 }
 
 function selectClient(code, filter) {
-    const client = ALL_CLIENTS.find(c => c.code === code);
-    addUserMessage(client.name);
+    const client = allClients.find(c => c.code === code);
+    addUserMessage(client ? client.name : code);
     addThinkingDots();
     
     setTimeout(() => {
@@ -315,12 +357,12 @@ function selectClient(code, filter) {
             showJobsForClient(code);
         }
         conversationArea.scrollTop = conversationArea.scrollHeight;
-    }, 800);
+    }, 600);
 }
 
 function showJobsForClient(code) {
-    const clientJobs = SAMPLE_JOBS[code] || [];
-    const client = ALL_CLIENTS.find(c => c.code === code);
+    const clientJobs = getJobsForClient(code);
+    const client = allClients.find(c => c.code === code);
     
     if (clientJobs.length === 0) {
         showEmptyState(client?.name || code);
@@ -344,8 +386,17 @@ function showJobsForClient(code) {
 }
 
 function showOverdueJobs(code) {
-    const clientJobs = (SAMPLE_JOBS[code] || []).filter(j => j.due === 'Today' || j.status === 'With Client');
-    const client = ALL_CLIENTS.find(c => c.code === code);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const clientJobs = getJobsForClient(code).filter(j => {
+        if (j.withClient) return true;
+        if (!j.updateDue) return false;
+        const dueDate = new Date(j.updateDue);
+        return dueDate <= today;
+    });
+    
+    const client = allClients.find(c => c.code === code);
     
     if (clientJobs.length === 0) {
         const response = document.createElement('div');
@@ -378,32 +429,35 @@ function showOverdueJobs(code) {
 
 function createJobCard(job, index) {
     const id = `job-${Date.now()}-${index}`;
+    const dueDate = formatDueDate(job.updateDue);
+    const lastUpdated = formatLastUpdated(job.lastUpdated);
+    
     return `
         <div class="job-card" id="${id}">
             <div class="job-card-header" data-job-id="${id}">
                 <div class="job-info">
-                    <div class="job-title">${job.number} — ${job.name}</div>
+                    <div class="job-title">${job.jobNumber} — ${job.jobName}</div>
                     <div class="job-meta">
                         ${job.stage}
                         <span class="job-meta-dot"></span>
-                        Due ${job.due}
+                        Due ${dueDate}
                         <span class="job-meta-dot"></span>
-                        ${job.status}
+                        ${job.withClient ? 'With Client' : job.status}
                     </div>
                 </div>
                 <span class="card-chevron">›</span>
             </div>
             <div class="job-details">
-                <div class="job-update-text">"${job.update}"</div>
+                <div class="job-update-text">"${job.update || 'No update yet'}"</div>
                 <div class="job-detail-row">
                     <span class="job-detail-label">Owner</span>
-                    <span class="job-detail-value">${job.owner}</span>
+                    <span class="job-detail-value">${job.projectOwner || 'TBC'}</span>
                 </div>
                 <div class="job-detail-row">
                     <span class="job-detail-label">Updated</span>
-                    <span class="job-detail-value">${job.lastUpdated}</span>
+                    <span class="job-detail-value">${lastUpdated}</span>
                 </div>
-                ${currentUser.mode === 'hunch' ? `<button class="update-btn" data-job="${job.number}">UPDATE</button>` : ''}
+                ${currentUser.mode === 'hunch' && job.channelUrl ? `<a href="${job.channelUrl}" target="_blank" class="teams-link">Open in Teams →</a>` : ''}
             </div>
         </div>
     `;
@@ -411,11 +465,6 @@ function createJobCard(job, index) {
 
 function toggleJobCard(id) {
     $(id).classList.toggle('expanded');
-}
-
-function makeUpdate(jobNumber) {
-    alert(`Opening update for ${jobNumber}...`);
-    // TODO: Implement update flow
 }
 
 function showEmptyState(clientName) {
@@ -443,7 +492,7 @@ function showAboutDot() {
             • Check on jobs and client work<br>
             • See what's overdue or needs attention<br>
             • Navigate to WIP or Tracker<br>
-            ${currentUser.mode === 'hunch' ? '• Make quick updates' : ''}
+            ${currentUser.mode === 'hunch' ? '• View job details and Teams links' : ''}
         </p>
         <p class="dot-text">Just ask me anything about your projects!</p>
         <div class="smart-prompts">
@@ -509,14 +558,6 @@ function bindDynamicElements(container) {
     container.querySelectorAll('.job-card-header').forEach(header => {
         header.addEventListener('click', () => {
             toggleJobCard(header.dataset.jobId);
-        });
-    });
-    
-    // Bind update buttons
-    container.querySelectorAll('.update-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            makeUpdate(btn.dataset.job);
         });
     });
 }

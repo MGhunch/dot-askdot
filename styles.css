@@ -410,7 +410,7 @@ body {
 
 /* ===== HELLO BUBBLE ===== */
 .hello-container {
-    margin-bottom: 16px;
+    margin-bottom: 24px;
     width: 100%;
     max-width: 320px;
     display: flex;
@@ -795,6 +795,25 @@ body {
 
 .job-detail-row:last-of-type {
     border-bottom: none;
+}
+
+.teams-link {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 10px 16px;
+    background: var(--grey-50);
+    border: 1.5px solid var(--grey-200);
+    border-radius: var(--radius-full);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--grey-600);
+    text-decoration: none;
+    transition: all 0.2s var(--ease-out);
+}
+
+.teams-link:hover {
+    border-color: var(--red);
+    color: var(--red);
 }
 
 .job-detail-label {
