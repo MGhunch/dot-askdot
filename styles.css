@@ -437,7 +437,6 @@ body {
     right: -60px;
     width: 100px;
     height: 100px;
-    animation: robotBob 2s ease-in-out infinite;
 }
 
 .robot-img {
