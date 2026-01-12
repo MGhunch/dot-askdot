@@ -565,6 +565,7 @@ body {
     right: 0;
     bottom: 0;
     transition: opacity 0.4s var(--ease-out);
+    overflow: hidden;
 }
 
 .conversation-view.visible {
@@ -577,11 +578,13 @@ body {
 .conversation-area {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 24px 20px;
     display: flex;
     flex-direction: column;
     gap: 16px;
     scroll-behavior: smooth;
+    min-height: 0; /* Key fix for flex scroll */
 }
 
 .conversation-area::-webkit-scrollbar {
