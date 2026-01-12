@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ask Dot</title>
+    <meta name="theme-color" content="#ED1C24">
+    <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="phone">
+        <!-- PIN Screen -->
+        <div class="pin-screen" id="pin-screen">
+            <div class="pin-logo">
+                <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="12" y="20" width="56" height="48" rx="12" fill="#f5f5f5" stroke="#1a1a1a" stroke-width="4"/>
+                    <circle cx="30" cy="40" r="6" fill="#1a1a1a"/>
+                    <circle cx="50" cy="40" r="6" fill="#1a1a1a"/>
+                    <rect x="36" y="6" width="8" height="18" rx="4" fill="#1a1a1a"/>
+                    <circle cx="40" cy="4" r="6" fill="#ED1C24"/>
+                    <rect x="26" y="54" width="28" height="4" rx="2" fill="#1a1a1a"/>
+                </svg>
+            </div>
+            <p class="pin-title">Enter PIN</p>
+            <div class="pin-dots">
+                <div class="pin-dot" id="dot-0"></div>
+                <div class="pin-dot" id="dot-1"></div>
+                <div class="pin-dot" id="dot-2"></div>
+                <div class="pin-dot" id="dot-3"></div>
+            </div>
+            <div class="pin-keypad">
+                <button class="pin-key" data-digit="1">1</button>
+                <button class="pin-key" data-digit="2">2</button>
+                <button class="pin-key" data-digit="3">3</button>
+                <button class="pin-key" data-digit="4">4</button>
+                <button class="pin-key" data-digit="5">5</button>
+                <button class="pin-key" data-digit="6">6</button>
+                <button class="pin-key" data-digit="7">7</button>
+                <button class="pin-key" data-digit="8">8</button>
+                <button class="pin-key" data-digit="9">9</button>
+                <button class="pin-key empty"></button>
+                <button class="pin-key" data-digit="0">0</button>
+                <button class="pin-key delete" id="pin-delete">⌫</button>
+            </div>
+            <p class="pin-error-msg" id="pin-error">PIN not recognised</p>
+        </div>
+        
+        <!-- Main App -->
+        <header class="header">
+            <a class="header-logo" id="home-btn">
+                <span class="logo-h">h</span>
+                <span class="logo-text">ai</span>
+                <span class="logo-super">2</span>
+            </a>
+            <button class="hamburger" id="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <nav class="dropdown" id="dropdown">
+                <div class="dropdown-item" data-action="wip">
+                    <span class="chevron">›</span> Go to WIP
+                </div>
+                <div class="dropdown-item" data-action="tracker">
+                    <span class="chevron">›</span> See the Tracker
+                </div>
+                <div class="dropdown-item" data-action="update">
+                    <span class="chevron">›</span> Make an update
+                </div>
+                <div class="dropdown-item" data-action="about">
+                    <span class="chevron">›</span> About Dot
+                </div>
+                <div class="dropdown-item muted" data-action="signout">
+                    <span class="chevron">›</span> Sign out
+                </div>
+            </nav>
+        </header>
+        
+        <div class="overlay" id="overlay"></div>
+        
+        <!-- Home State -->
+        <main class="home-content" id="home-content">
+            <div class="greeting">
+                <span class="greeting-text">HI <span class="greeting-name" id="user-name">THERE</span></span>
+                <span class="greeting-wave">👋</span>
+            </div>
+            <div class="hello-container">
+                <div class="hello">
+                    <span class="hello-text">HELLO</span>
+                </div>
+                <div class="robot-container">
+                    <div class="robot-face">
+                        <div class="robot-antenna"></div>
+                        <div class="robot-eyes">
+                            <div class="robot-eye"></div>
+                            <div class="robot-eye"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="home-input-area">
+                <input type="text" class="home-input" id="home-input" placeholder="Ask me anything...">
+                <button class="input-send" id="home-send">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </div>
+            <div class="examples" id="examples">
+                <button class="example-btn" data-question="Show me WIP">Show me WIP</button>
+                <button class="example-btn" data-question="What's overdue?">What's overdue?</button>
+                <button class="example-btn" data-question="What can Dot do?">What can Dot do?</button>
+            </div>
+        </main>
+        
+        <!-- Conversation State -->
+        <div class="conversation-view" id="conversation-view">
+            <div class="conversation-area" id="conversation-area"></div>
+            <div class="chat-input-area">
+                <input type="text" class="chat-input" id="chat-input" placeholder="Ask a follow-up...">
+                <div class="chat-robot">
+                    <div class="mini-robot">
+                        <div class="mini-robot-antenna"></div>
+                        <div class="mini-robot-eyes">
+                            <div class="mini-robot-eye"></div>
+                            <div class="mini-robot-eye"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
