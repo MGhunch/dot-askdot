@@ -100,6 +100,179 @@ function formatLastUpdated(isoDate) {
     return `${Math.floor(diffDays / 7)} weeks ago`;
 }
 
+// Words to ignore when searching
+const STOP_WORDS = ['the', 'a', 'an', 'job', 'project', 'about', 'for', 'with', 'that', 'one', 'whats', "what's", 'where', 'is', 'are', 'can', 'you', 'find', 'show', 'me', 'i', 'need', 'looking'];
+
+function extractSearchTerms(query, clientMatch) {
+    // Remove client name and code from query
+    let q = query.toLowerCase();
+    q = q.replace(clientMatch.name.toLowerCase(), '');
+    q = q.replace(clientMatch.code.toLowerCase(), '');
+    
+    // Split into words and filter out stop words
+    const words = q.split(/\s+/).filter(word => 
+        word.length > 2 && !STOP_WORDS.includes(word)
+    );
+    
+    return words;
+}
+
+function scoreJobMatch(job, searchTerms) {
+    const jobName = job.jobName.toLowerCase();
+    const jobDesc = (job.description || '').toLowerCase();
+    const jobUpdate = (job.update || '').toLowerCase();
+    
+    let score = 0;
+    
+    for (const term of searchTerms) {
+        // Exact match in job name scores highest
+        if (jobName.includes(term)) {
+            score += 10;
+        }
+        // Match in description
+        if (jobDesc.includes(term)) {
+            score += 5;
+        }
+        // Match in update
+        if (jobUpdate.includes(term)) {
+            score += 2;
+        }
+    }
+    
+    return score;
+}
+
+function searchJobsForClient(clientCode, searchTerms) {
+    const clientJobs = getJobsForClient(clientCode);
+    const client = allClients.find(c => c.code === clientCode);
+    
+    // Score all jobs
+    const scoredJobs = clientJobs.map(job => ({
+        job,
+        score: scoreJobMatch(job, searchTerms)
+    })).filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+    
+    if (scoredJobs.length === 0) {
+        const response = document.createElement('div');
+        response.className = 'dot-response fade-in';
+        response.innerHTML = `
+            <p class="dot-text">I couldn't find a ${client?.name || clientCode} job matching that. Here's everything for ${client?.name || clientCode}:</p>
+            <div class="job-cards">
+                ${clientJobs.slice(0, 5).map((job, i) => createJobCard(job, i)).join('')}
+            </div>
+            <div class="smart-prompts">
+                <button class="smart-prompt" data-question="Check a client">Try another client</button>
+            </div>
+        `;
+        conversationArea.appendChild(response);
+        bindDynamicElements(response);
+        return;
+    }
+    
+    if (scoredJobs.length === 1 || scoredJobs[0].score > scoredJobs[1]?.score * 1.5) {
+        // Clear winner
+        const bestJob = scoredJobs[0].job;
+        const response = document.createElement('div');
+        response.className = 'dot-response fade-in';
+        response.innerHTML = `
+            <p class="dot-text">I think you mean <strong>${bestJob.jobNumber} — ${bestJob.jobName}</strong>?</p>
+            <div class="job-cards">
+                ${createJobCard(bestJob, 0)}
+            </div>
+            <div class="smart-prompts">
+                <button class="smart-prompt" data-question="${client?.name || clientCode} jobs">See all ${client?.name || clientCode} jobs</button>
+            </div>
+        `;
+        conversationArea.appendChild(response);
+        bindDynamicElements(response);
+    } else {
+        // Multiple matches
+        const topMatches = scoredJobs.slice(0, 3);
+        const response = document.createElement('div');
+        response.className = 'dot-response fade-in';
+        response.innerHTML = `
+            <p class="dot-text">I found a few ${client?.name || clientCode} jobs that might match:</p>
+            <div class="job-cards">
+                ${topMatches.map((item, i) => createJobCard(item.job, i)).join('')}
+            </div>
+            <div class="smart-prompts">
+                <button class="smart-prompt" data-question="${client?.name || clientCode} jobs">See all ${client?.name || clientCode} jobs</button>
+            </div>
+        `;
+        conversationArea.appendChild(response);
+        bindDynamicElements(response);
+    }
+}
+
+function searchAllJobs(query) {
+    // Extract search terms (remove stop words)
+    const words = query.toLowerCase().split(/\s+/).filter(word => 
+        word.length > 2 && !STOP_WORDS.includes(word)
+    );
+    
+    if (words.length === 0) {
+        showFindJob();
+        return;
+    }
+    
+    // Score all jobs
+    const scoredJobs = allJobs.map(job => ({
+        job,
+        score: scoreJobMatch(job, words)
+    })).filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+    
+    if (scoredJobs.length === 0) {
+        const response = document.createElement('div');
+        response.className = 'dot-response fade-in';
+        response.innerHTML = `
+            <p class="dot-text">I couldn't find a job matching that. Try including the client name, like "the Tower job about cross-sell".</p>
+            <div class="smart-prompts">
+                <button class="smart-prompt" data-question="Check a client">Check a client</button>
+                <button class="smart-prompt" data-question="What's due today?">What's due today?</button>
+            </div>
+        `;
+        conversationArea.appendChild(response);
+        bindDynamicElements(response);
+        return;
+    }
+    
+    if (scoredJobs.length === 1 || scoredJobs[0].score > scoredJobs[1]?.score * 1.5) {
+        // Clear winner
+        const bestJob = scoredJobs[0].job;
+        const response = document.createElement('div');
+        response.className = 'dot-response fade-in';
+        response.innerHTML = `
+            <p class="dot-text">I think you mean <strong>${bestJob.jobNumber} — ${bestJob.jobName}</strong>?</p>
+            <div class="job-cards">
+                ${createJobCard(bestJob, 0)}
+            </div>
+            <div class="smart-prompts">
+                <button class="smart-prompt" data-question="Find a job">Find another job</button>
+            </div>
+        `;
+        conversationArea.appendChild(response);
+        bindDynamicElements(response);
+    } else {
+        // Multiple matches
+        const topMatches = scoredJobs.slice(0, 3);
+        const response = document.createElement('div');
+        response.className = 'dot-response fade-in';
+        response.innerHTML = `
+            <p class="dot-text">I found a few jobs that might match:</p>
+            <div class="job-cards">
+                ${topMatches.map((item, i) => createJobCard(item.job, i)).join('')}
+            </div>
+            <div class="smart-prompts">
+                <button class="smart-prompt" data-question="Find a job">Find another job</button>
+            </div>
+        `;
+        conversationArea.appendChild(response);
+        bindDynamicElements(response);
+    }
+}
+
 // ===== PIN FUNCTIONS =====
 function enterPin(digit) {
     if (enteredPin.length >= 4) return;
@@ -348,7 +521,7 @@ function processQuestion(question) {
                 }
             } else if (q.includes('find a job') || q.includes('find job') || q.includes('search')) {
                 showFindJob();
-            } else if (q.includes('check a client') || q.includes('check client') || q.includes('client')) {
+            } else if (q.includes('check a client') || q.includes('check client')) {
                 showClientPicker();
             } else if (q.includes('three wishes') || q.includes('3 wishes') || q.includes('genie')) {
                 showThreeWishes();
@@ -357,11 +530,20 @@ function processQuestion(question) {
             } else if (q.includes('tracker')) {
                 showTrackerComingSoon();
             } 
-            // 2. Client name found but no specific request → show their jobs
+            // 2. Client name found - try to find a specific job or show all
             else if (clientMatch) {
-                showJobsForClient(clientMatch.code);
+                const searchTerms = extractSearchTerms(q, clientMatch);
+                if (searchTerms.length > 0) {
+                    searchJobsForClient(clientMatch.code, searchTerms);
+                } else {
+                    showJobsForClient(clientMatch.code);
+                }
             }
-            // 3. Nothing matched
+            // 3. No client but maybe searching for a job by description
+            else if (q.includes('job') || q.includes('project') || q.includes('the one about') || q.includes('that one')) {
+                searchAllJobs(q);
+            }
+            // 4. Nothing matched
             else {
                 showDefaultResponse(question);
             }
@@ -636,7 +818,7 @@ function createJobCard(job, index) {
                     <span class="job-detail-value">${lastUpdated}</span>
                 </div>
                 <div class="job-actions">
-                    ${job.channelUrl ? `<a href="${job.channelUrl}" target="_blank" class="job-action-btn secondary">Teams →</a>` : ''}
+                    ${job.channelUrl ? `<a href="${job.channelUrl}" target="_blank" class="job-action-btn secondary">Open in Teams →</a>` : ''}
                     ${currentUser.mode === 'hunch' ? `<button class="job-action-btn primary" data-job="${job.jobNumber}" onclick="submitUpdate('${job.jobNumber}', this)">Update →</button>` : ''}
                 </div>
             </div>
