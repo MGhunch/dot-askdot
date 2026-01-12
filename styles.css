@@ -411,10 +411,14 @@ body {
 /* ===== HELLO BUBBLE ===== */
 .hello-container {
     margin-bottom: 24px;
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    justify-content: center;
 }
 
 .hello-img {
-    width: 320px;
+    width: 80%;
     height: auto;
     object-fit: contain;
     animation: helloAppear 0.6s var(--ease-bounce);
