@@ -432,23 +432,25 @@ function createJobCard(job, index) {
     const dueDate = formatDueDate(job.updateDue);
     const lastUpdated = formatLastUpdated(job.lastUpdated);
     
+    // SVG icons
+    const clockIcon = `<svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
+    
+    const withClientIcon = `<svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>`;
+    
     return `
         <div class="job-card" id="${id}">
             <div class="job-card-header" data-job-id="${id}">
                 <div class="job-info">
                     <div class="job-title">${job.jobNumber} — ${job.jobName}</div>
                     <div class="job-meta">
-                        ${job.stage}
-                        <span class="job-meta-dot"></span>
-                        Due ${dueDate}
-                        <span class="job-meta-dot"></span>
-                        ${job.withClient ? 'With Client' : job.status}
+                        ${clockIcon} ${dueDate}
+                        ${job.withClient ? `<span class="job-meta-dot"></span>${withClientIcon} With Client` : ''}
                     </div>
                 </div>
                 <span class="card-chevron">›</span>
             </div>
             <div class="job-details">
-                <div class="job-update-text">"${job.update || 'No update yet'}"</div>
+                <textarea class="job-update-input" data-job="${job.jobNumber}" placeholder="Add an update...">${job.update || ''}</textarea>
                 <div class="job-detail-row">
                     <span class="job-detail-label">Owner</span>
                     <span class="job-detail-value">${job.projectOwner || 'TBC'}</span>
@@ -457,7 +459,10 @@ function createJobCard(job, index) {
                     <span class="job-detail-label">Updated</span>
                     <span class="job-detail-value">${lastUpdated}</span>
                 </div>
-                ${currentUser.mode === 'hunch' && job.channelUrl ? `<a href="${job.channelUrl}" target="_blank" class="teams-link">Open in Teams →</a>` : ''}
+                <div class="job-actions">
+                    ${job.channelUrl ? `<a href="${job.channelUrl}" target="_blank" class="job-action-btn secondary">Open in Teams →</a>` : ''}
+                    ${currentUser.mode === 'hunch' ? `<button class="job-action-btn primary" data-job="${job.jobNumber}" onclick="submitUpdate('${job.jobNumber}', this)">Update →</button>` : ''}
+                </div>
             </div>
         </div>
     `;
@@ -465,6 +470,52 @@ function createJobCard(job, index) {
 
 function toggleJobCard(id) {
     $(id).classList.toggle('expanded');
+}
+
+async function submitUpdate(jobNumber, btn) {
+    const card = btn.closest('.job-card');
+    const textarea = card.querySelector('.job-update-input');
+    const message = textarea.value.trim();
+    
+    if (!message) {
+        textarea.focus();
+        return;
+    }
+    
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    
+    try {
+        // POST to proxy which sends to N8N
+        const response = await fetch('https://dot-proxy.up.railway.app/proxy/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                clientCode: jobNumber.split(' ')[0],
+                jobNumber: jobNumber,
+                message: message
+            })
+        });
+        
+        if (!response.ok) throw new Error('Update failed');
+        
+        btn.textContent = 'Done ✓';
+        btn.classList.add('success');
+        
+        setTimeout(() => {
+            btn.textContent = 'Update →';
+            btn.classList.remove('success');
+            btn.disabled = false;
+        }, 2000);
+        
+    } catch (e) {
+        console.error('Update failed:', e);
+        btn.textContent = 'Failed';
+        setTimeout(() => {
+            btn.textContent = 'Update →';
+            btn.disabled = false;
+        }, 2000);
+    }
 }
 
 function showEmptyState(clientName) {
