@@ -106,7 +106,7 @@ function checkPin() {
 
 function unlockApp() {
     pinScreen.classList.add('hidden');
-    homeInput.placeholder = `How can I help, ${currentUser.name}?`;
+    homeInput.placeholder = `Hi ${currentUser.name}, what's cooking?`;
     updateExamplesForUser();
 }
 

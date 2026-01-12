@@ -411,12 +411,13 @@ body {
 /* ===== HELLO BUBBLE ===== */
 .hello-container {
     position: relative;
-    margin-bottom: 12px;
+    margin-bottom: 32px;
+    margin-top: -20px;
 }
 
 .hello {
-    width: 240px;
-    height: 180px;
+    width: 300px;
+    height: 220px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -434,9 +435,9 @@ body {
 .robot-container {
     position: absolute;
     bottom: -10px;
-    right: -28px;
-    width: 72px;
-    height: 72px;
+    right: -32px;
+    width: 80px;
+    height: 80px;
     animation: robotBob 2s ease-in-out infinite;
 }
 
@@ -449,14 +450,23 @@ body {
 /* ===== INPUT AREA ===== */
 .home-input-area {
     width: 100%;
-    max-width: 320px;
+    max-width: 340px;
     position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.input-robot {
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+    flex-shrink: 0;
 }
 
 .home-input {
-    width: 100%;
-    padding: 16px 24px;
-    padding-right: 56px;
+    flex: 1;
+    padding: 16px 56px 16px 20px;
     border: 2px solid var(--grey-200);
     border-radius: var(--radius-full);
     font-family: var(--font-body);
