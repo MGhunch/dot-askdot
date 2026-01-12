@@ -636,7 +636,7 @@ function createJobCard(job, index) {
                     <span class="job-detail-value">${lastUpdated}</span>
                 </div>
                 <div class="job-actions">
-                    ${job.channelUrl ? `<a href="${job.channelUrl}" target="_blank" class="job-action-btn secondary">Open in Teams →</a>` : ''}
+                    ${job.channelUrl ? `<a href="${job.channelUrl}" target="_blank" class="job-action-btn secondary">Teams →</a>` : ''}
                     ${currentUser.mode === 'hunch' ? `<button class="job-action-btn primary" data-job="${job.jobNumber}" onclick="submitUpdate('${job.jobNumber}', this)">Update →</button>` : ''}
                 </div>
             </div>
