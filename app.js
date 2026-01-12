@@ -56,7 +56,6 @@ const conversationView = $('conversation-view');
 const conversationArea = $('conversation-area');
 const homeInput = $('home-input');
 const chatInput = $('chat-input');
-const userName = $('user-name');
 const dropdown = $('dropdown');
 const overlay = $('overlay');
 const hamburger = $('hamburger');
@@ -107,7 +106,7 @@ function checkPin() {
 
 function unlockApp() {
     pinScreen.classList.add('hidden');
-    userName.textContent = currentUser.name.toUpperCase();
+    homeInput.placeholder = `How can I help, ${currentUser.name}?`;
     updateExamplesForUser();
 }
 
@@ -568,6 +567,8 @@ function init() {
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') continueConversation();
     });
+    
+    $('chat-send').addEventListener('click', continueConversation);
     
     // Example buttons
     bindExampleButtons();

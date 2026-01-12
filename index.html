@@ -46,9 +46,7 @@
         <!-- Main App -->
         <header class="header">
             <a class="header-logo" id="home-btn">
-                <span class="logo-h">h</span>
-                <span class="logo-text">ai</span>
-                <span class="logo-super">2</span>
+                <img src="images/ai2-logo.png" alt="ai²" class="header-logo-img">
             </a>
             <button class="hamburger" id="hamburger">
                 <span></span>
@@ -78,10 +76,6 @@
         
         <!-- Home State -->
         <main class="home-content" id="home-content">
-            <div class="greeting">
-                <span class="greeting-text">HI <span class="greeting-name" id="user-name">THERE</span></span>
-                <span class="greeting-wave">👋</span>
-            </div>
             <div class="hello-container">
                 <div class="hello">
                     <img src="images/Hello.png" alt="Hello" class="hello-img">
@@ -91,7 +85,7 @@
                 </div>
             </div>
             <div class="home-input-area">
-                <input type="text" class="home-input" id="home-input" placeholder="Ask me anything...">
+                <input type="text" class="home-input" id="home-input" placeholder="How can I help?">
                 <button class="input-send" id="home-send">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -111,9 +105,12 @@
             <div class="conversation-area" id="conversation-area"></div>
             <div class="chat-input-area">
                 <input type="text" class="chat-input" id="chat-input" placeholder="Ask a follow-up...">
-                <div class="chat-robot">
-                    <img src="images/Robot.png" alt="Dot" class="chat-robot-img">
-                </div>
+                <button class="chat-send" id="chat-send">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
             </div>
         </div>
     </div>
