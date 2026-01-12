@@ -196,15 +196,22 @@ function closeMenu() {
 
 function menuAction(action) {
     closeMenu();
+    const isMobile = window.innerWidth <= 440;
+    
     switch(action) {
         case 'wip':
-            window.open('https://dot.hunch.co.nz/todo.html', '_blank');
+            if (isMobile) {
+                showDesktopPrompt('WIP');
+            } else {
+                window.open('https://dot.hunch.co.nz/todo.html', '_blank');
+            }
             break;
         case 'tracker':
-            askQuestion('Show me the tracker');
-            break;
-        case 'update':
-            askQuestion('I want to make an update');
+            if (isMobile) {
+                showDesktopPrompt('Tracker');
+            } else {
+                window.open('https://dot.hunch.co.nz/tracker.html', '_blank');
+            }
             break;
         case 'about':
             askQuestion('What can Dot do?');
@@ -213,6 +220,24 @@ function menuAction(action) {
             signOut();
             break;
     }
+}
+
+function showDesktopPrompt(tool) {
+    // Show conversation view with desktop message
+    homeContent.classList.add('hidden');
+    conversationView.classList.add('visible');
+    
+    const response = document.createElement('div');
+    response.className = 'dot-response fade-in';
+    response.innerHTML = `
+        <p class="dot-text">${tool} works best on a bigger screen. Try it on desktop!</p>
+        <div class="smart-prompts">
+            <button class="smart-prompt" data-question="Find a job">Find a job</button>
+            <button class="smart-prompt" data-question="Check a client">Check a client</button>
+        </div>
+    `;
+    conversationArea.appendChild(response);
+    bindDynamicElements(response);
 }
 
 // ===== CONVERSATION FUNCTIONS =====
@@ -277,36 +302,67 @@ function processQuestion(question) {
     setTimeout(() => {
         removeThinkingDots();
         
+        // Check for client name in query
+        const clientMatch = allClients.find(c => 
+            q.includes(c.name.toLowerCase()) || 
+            q.includes(c.code.toLowerCase())
+        );
+        
         if (currentUser && currentUser.mode === 'client') {
             // Client mode - restricted view
-            if (q.includes('wip') || q.includes('jobs') || q.includes('my jobs')) {
-                showJobsForClient(currentUser.client === 'ONS' ? 'ONE' : currentUser.client);
-            } else if (q.includes('overdue')) {
-                showOverdueJobs(currentUser.client === 'ONS' ? 'ONE' : currentUser.client);
+            const clientCode = currentUser.client === 'ONS' ? 'ONE' : currentUser.client;
+            
+            if (q.includes('overdue') || q.includes('late') || q.includes('behind')) {
+                showOverdueJobs(clientCode);
+            } else if ((q.includes('due') || q.includes('deadline')) && q.includes('today')) {
+                showDueToday(clientCode);
+            } else if (q.includes('next') || q.includes('coming up')) {
+                showDueNext(clientCode);
+            } else if (q.includes('wip') || q.includes('jobs') || q.includes('my jobs')) {
+                showJobsForClient(clientCode);
             } else if (q.includes('what can dot do') || q.includes('about dot') || q.includes('help')) {
                 showAboutDot();
             } else {
-                showDefaultResponse(question);
+                // Default for client mode - show their jobs
+                showJobsForClient(clientCode);
             }
         } else {
             // Hunch mode - full access
-            if (q.includes('wip') && !q.includes('sky') && !q.includes('one') && !q.includes('tower') && !q.includes('fisher')) {
+            
+            // 1. Specific requests first
+            if ((q.includes('due') || q.includes('deadline')) && q.includes('today')) {
+                showDueToday();
+            } else if ((q.includes('next') && (q.includes('due') || q.includes('deadline') || q.includes('what'))) || q.includes('coming up')) {
+                showDueNext();
+            } else if (q.includes('overdue') || q.includes('late') || q.includes('behind')) {
+                if (clientMatch) {
+                    showOverdueJobs(clientMatch.code);
+                } else {
+                    showClientPicker('overdue');
+                }
+            } else if (q.includes('wip')) {
+                if (clientMatch) {
+                    showJobsForClient(clientMatch.code);
+                } else {
+                    showClientPicker();
+                }
+            } else if (q.includes('find a job') || q.includes('find job') || q.includes('search')) {
+                showFindJob();
+            } else if (q.includes('check a client') || q.includes('check client') || q.includes('client')) {
                 showClientPicker();
-            } else if (q.includes('wip') && q.includes('sky')) {
-                showJobsForClient('SKY');
-            } else if (q.includes('wip') && (q.includes('one') || q.includes('one nz'))) {
-                showJobsForClient('ONE');
-            } else if (q.includes('wip') && q.includes('tower')) {
-                showJobsForClient('TOW');
-            } else if (q.includes('wip') && q.includes('fisher')) {
-                showJobsForClient('FIS');
-            } else if (q.includes('overdue')) {
-                showClientPicker('overdue');
+            } else if (q.includes('three wishes') || q.includes('3 wishes') || q.includes('genie')) {
+                showThreeWishes();
             } else if (q.includes('what can dot do') || q.includes('about dot') || q.includes('help')) {
                 showAboutDot();
             } else if (q.includes('tracker')) {
                 showTrackerComingSoon();
-            } else {
+            } 
+            // 2. Client name found but no specific request → show their jobs
+            else if (clientMatch) {
+                showJobsForClient(clientMatch.code);
+            }
+            // 3. Nothing matched
+            else {
                 showDefaultResponse(question);
             }
         }
@@ -427,6 +483,126 @@ function showOverdueJobs(code) {
     bindDynamicElements(response);
 }
 
+function showDueToday(clientCode = null) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Get jobs due today
+    let dueTodayJobs = allJobs.filter(j => {
+        if (!j.updateDue) return false;
+        const dueDate = new Date(j.updateDue);
+        dueDate.setHours(0, 0, 0, 0);
+        return dueDate.getTime() === today.getTime();
+    });
+    
+    // Filter by client if specified
+    if (clientCode) {
+        dueTodayJobs = dueTodayJobs.filter(j => j.clientCode === clientCode);
+    }
+    
+    if (dueTodayJobs.length === 0) {
+        const response = document.createElement('div');
+        response.className = 'dot-response fade-in';
+        response.innerHTML = `
+            <p class="dot-text">Nothing due today! 🎉</p>
+            <div class="smart-prompts">
+                <button class="smart-prompt" data-question="What's due next?">What's due next?</button>
+                <button class="smart-prompt" data-question="Show me WIP">Show me WIP</button>
+            </div>
+        `;
+        conversationArea.appendChild(response);
+        bindDynamicElements(response);
+        return;
+    }
+    
+    const firstJob = dueTodayJobs[0];
+    const restJobs = dueTodayJobs.slice(1);
+    
+    let html = `
+        <p class="dot-text"><strong>${firstJob.jobNumber} — ${firstJob.jobName}</strong> is due today.</p>
+        <div class="job-cards">
+            ${createJobCard(firstJob, 0)}
+        </div>
+    `;
+    
+    if (restJobs.length > 0) {
+        html += `
+            <p class="dot-text" style="margin-top: 16px;">But there's ${restJobs.length > 1 ? 'a few more' : 'one more'} behind the same eightball:</p>
+            <ul class="also-due-list">
+                ${restJobs.map(j => `<li><strong>${j.jobNumber}</strong> — ${j.jobName}</li>`).join('')}
+            </ul>
+        `;
+    }
+    
+    html += `
+        <div class="smart-prompts">
+            <button class="smart-prompt" data-question="What's due next?">What's due next?</button>
+            <button class="smart-prompt" data-question="Show me WIP">Show me WIP</button>
+        </div>
+    `;
+    
+    const response = document.createElement('div');
+    response.className = 'dot-response fade-in';
+    response.innerHTML = html;
+    conversationArea.appendChild(response);
+    bindDynamicElements(response);
+}
+
+function showDueNext(clientCode = null) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Get jobs with due dates in the future, sorted by date
+    let upcomingJobs = allJobs.filter(j => {
+        if (!j.updateDue) return false;
+        const dueDate = new Date(j.updateDue);
+        dueDate.setHours(0, 0, 0, 0);
+        return dueDate >= today;
+    });
+    
+    // Filter by client if specified
+    if (clientCode) {
+        upcomingJobs = upcomingJobs.filter(j => j.clientCode === clientCode);
+    }
+    
+    // Sort by due date
+    upcomingJobs.sort((a, b) => new Date(a.updateDue) - new Date(b.updateDue));
+    
+    if (upcomingJobs.length === 0) {
+        const response = document.createElement('div');
+        response.className = 'dot-response fade-in';
+        response.innerHTML = `
+            <p class="dot-text">No upcoming deadlines in the system.</p>
+            <div class="smart-prompts">
+                <button class="smart-prompt" data-question="Show me WIP">Show me WIP</button>
+            </div>
+        `;
+        conversationArea.appendChild(response);
+        bindDynamicElements(response);
+        return;
+    }
+    
+    const nextJob = upcomingJobs[0];
+    const dueDate = formatDueDate(nextJob.updateDue);
+    
+    const response = document.createElement('div');
+    response.className = 'dot-response fade-in';
+    response.innerHTML = `
+        <p class="dot-text">Next up is <strong>${nextJob.jobNumber} — ${nextJob.jobName}</strong>, due ${dueDate}.</p>
+        <div class="job-cards">
+            ${createJobCard(nextJob, 0)}
+        </div>
+        <div class="smart-prompts">
+            <button class="smart-prompt" data-question="What's due today?">Due today</button>
+            <button class="smart-prompt" data-question="Show me WIP">Show me WIP</button>
+        </div>
+    `;
+    conversationArea.appendChild(response);
+    bindDynamicElements(response);
+}
+
 function createJobCard(job, index) {
     const id = `job-${Date.now()}-${index}`;
     const dueDate = formatDueDate(job.updateDue);
@@ -538,17 +714,17 @@ function showAboutDot() {
     const response = document.createElement('div');
     response.className = 'dot-response fade-in';
     response.innerHTML = `
-        <p class="dot-text">I'm Dot, your project assistant! I can help you:</p>
+        <p class="dot-text">I'm Dot, I'm here to help you:</p>
         <p class="dot-text" style="margin-bottom: 8px;">
-            • Check on jobs and client work<br>
-            • See what's overdue or needs attention<br>
-            • Navigate to WIP or Tracker<br>
-            ${currentUser.mode === 'hunch' ? '• View job details and Teams links' : ''}
+            • Check on jobs and client work.<br>
+            • See what's due or coming up.<br>
+            • Easily find info on any job.
         </p>
-        <p class="dot-text">Just ask me anything about your projects!</p>
+        <p class="dot-text">I'm a robot, not a genie, so go easy.</p>
         <div class="smart-prompts">
-            <button class="smart-prompt" data-question="${currentUser.mode === 'client' ? 'Show me my jobs' : 'Show me WIP'}">Try it</button>
-            <button class="smart-prompt" data-question="What's overdue?">What's overdue?</button>
+            <button class="smart-prompt" data-question="Find a job">Find a job</button>
+            <button class="smart-prompt" data-question="Check a client">Check a client</button>
+            <button class="smart-prompt" data-question="Grant three wishes">Grant three wishes</button>
         </div>
     `;
     conversationArea.appendChild(response);
@@ -562,7 +738,35 @@ function showTrackerComingSoon() {
         <p class="dot-text">The Tracker is coming soon! 🚀</p>
         <p class="dot-text">For now, I can help you with WIP and project updates.</p>
         <div class="smart-prompts">
-            <button class="smart-prompt" data-question="Show me WIP">Show me WIP</button>
+            <button class="smart-prompt" data-question="Check a client">Check a client</button>
+        </div>
+    `;
+    conversationArea.appendChild(response);
+    bindDynamicElements(response);
+}
+
+function showFindJob() {
+    const response = document.createElement('div');
+    response.className = 'dot-response fade-in';
+    response.innerHTML = `
+        <p class="dot-text">What job are you looking for? Try typing a job number like <strong>SKY 014</strong> or tell me the client and I'll show you what's on.</p>
+        <div class="smart-prompts">
+            <button class="smart-prompt" data-question="Check a client">Check a client</button>
+            <button class="smart-prompt" data-question="What's due today?">What's due today?</button>
+        </div>
+    `;
+    conversationArea.appendChild(response);
+    bindDynamicElements(response);
+}
+
+function showThreeWishes() {
+    const response = document.createElement('div');
+    response.className = 'dot-response fade-in';
+    response.innerHTML = `
+        <p class="dot-text">So you did read the prompt. Sorry to disappoint, best wish I can do is hope you're smiling. 😊</p>
+        <div class="smart-prompts">
+            <button class="smart-prompt" data-question="Find a job">Find a job</button>
+            <button class="smart-prompt" data-question="Check a client">Check a client</button>
         </div>
     `;
     conversationArea.appendChild(response);
@@ -575,8 +779,8 @@ function showDefaultResponse(question) {
     response.innerHTML = `
         <p class="dot-text">I'm not sure how to help with that yet. Try asking about:</p>
         <div class="smart-prompts">
-            <button class="smart-prompt" data-question="${currentUser.mode === 'client' ? 'Show me my jobs' : 'Show me WIP'}">${currentUser.mode === 'client' ? 'My jobs' : 'Show me WIP'}</button>
-            <button class="smart-prompt" data-question="What's overdue?">What's overdue?</button>
+            <button class="smart-prompt" data-question="Find a job">Find a job</button>
+            <button class="smart-prompt" data-question="Check a client">Check a client</button>
             <button class="smart-prompt" data-question="What can Dot do?">What can Dot do?</button>
         </div>
     `;

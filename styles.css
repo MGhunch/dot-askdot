@@ -944,6 +944,26 @@ body {
     transform: scale(0.96);
 }
 
+/* ===== ALSO DUE LIST ===== */
+.also-due-list {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 16px 0;
+}
+
+.also-due-list li {
+    padding: 10px 14px;
+    background: var(--grey-50);
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+    font-size: 14px;
+    color: var(--grey-600);
+}
+
+.also-due-list li strong {
+    color: var(--grey-800);
+}
+
 /* ===== CHAT INPUT ===== */
 .chat-input-area {
     display: flex;
