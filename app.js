@@ -10,6 +10,18 @@ const PROXY_BASE = 'https://dot-proxy.up.railway.app';
 // Key clients shown in picker (rest go to "Other")
 const KEY_CLIENTS = ['ONE', 'ONB', 'ONS', 'SKY', 'TOW'];
 
+// Display name overrides for clients
+const CLIENT_DISPLAY_NAMES = {
+    'ONE': 'One NZ (Marketing)',
+    'ONB': 'One NZ (Business)',
+    'ONS': 'One NZ (Simplification)'
+};
+
+// Helper to get display name
+function getClientDisplayName(client) {
+    return CLIENT_DISPLAY_NAMES[client.code] || client.name;
+}
+
 // PIN Database
 const PINS = {
     '9871': { name: 'Michael', fullName: 'Michael Goldthorpe', client: 'ALL', clientName: 'Hunch', mode: 'hunch' }
@@ -558,7 +570,7 @@ function renderClientPicker() {
             ${keyClients.map(c => `
                 <div class="client-card" data-client="${c.code}">
                     <div>
-                        <div class="client-name">${c.name}</div>
+                        <div class="client-name">${getClientDisplayName(c)}</div>
                         <div class="client-count">${c.jobCount} active job${c.jobCount === 1 ? '' : 's'}</div>
                     </div>
                     <span class="card-chevron">›</span>
@@ -602,7 +614,7 @@ function createJobCard(job, index) {
         <div class="job-card" id="${id}">
             <div class="job-card-header" data-job-id="${id}">
                 <div class="job-info">
-                    <div class="job-title">${job.jobNumber} — ${job.jobName}</div>
+                    <div class="job-title">${job.jobNumber} | ${job.jobName}</div>
                     <div class="job-meta">
                         ${clockIcon} ${dueDate}
                         ${job.withClient ? `<span class="job-meta-dot"></span>${withClientIcon} With Client` : ''}
@@ -806,7 +818,7 @@ function showOtherClients() {
                 ${otherClients.map(c => `
                     <div class="client-card" data-client="${c.code}">
                         <div>
-                            <div class="client-name">${c.name}</div>
+                            <div class="client-name">${getClientDisplayName(c)}</div>
                             <div class="client-count">${c.jobCount} active job${c.jobCount === 1 ? '' : 's'}</div>
                         </div>
                         <span class="card-chevron">›</span>
