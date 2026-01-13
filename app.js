@@ -34,6 +34,7 @@ let allJobs = [];
 const $ = (id) => document.getElementById(id);
 const $$ = (selector) => document.querySelectorAll(selector);
 
+// Phone layout elements
 const pinScreen = $('pin-screen');
 const pinError = $('pin-error');
 const homeContent = $('home-content');
@@ -45,6 +46,29 @@ const dropdown = $('dropdown');
 const overlay = $('overlay');
 const hamburger = $('hamburger');
 const examples = $('examples');
+
+// Landscape layout elements
+const pinScreenLandscape = $('pin-screen-landscape');
+const pinErrorLandscape = $('pin-error-landscape');
+const landscapeHome = $('landscape-home');
+const landscapeConversation = $('landscape-conversation');
+const landscapeConversationArea = $('landscape-conversation-area');
+const landscapeInput = $('landscape-input');
+const landscapeChatInput = $('landscape-chat-input');
+const landscapeFooter = $('landscape-footer');
+const dropdownLandscape = $('dropdown-landscape');
+const overlayLandscape = $('overlay-landscape');
+const hamburgerLandscape = $('hamburger-landscape');
+
+// Helper to check if we're in landscape mode
+function isLandscape() {
+    return window.innerWidth >= 900;
+}
+
+// Get active conversation area based on current layout
+function getActiveConversationArea() {
+    return isLandscape() ? landscapeConversationArea : conversationArea;
+}
 
 // ===== API FUNCTIONS =====
 async function loadClients() {
@@ -350,6 +374,7 @@ function processQuestion(question) {
         }
         
         conversationArea.scrollTop = conversationArea.scrollHeight;
+        if (landscapeConversationArea) landscapeConversationArea.scrollTop = landscapeConversationArea.scrollHeight;
     }, 600);
 }
 
@@ -492,6 +517,7 @@ function executeHelp() {
 // ===== RENDERERS =====
 
 function renderResponse({ text, jobs = [], prompts = [] }) {
+    const area = getActiveConversationArea();
     const response = document.createElement('div');
     response.className = 'dot-response fade-in';
     
@@ -514,11 +540,12 @@ function renderResponse({ text, jobs = [], prompts = [] }) {
     }
     
     response.innerHTML = html;
-    conversationArea.appendChild(response);
+    area.appendChild(response);
     bindDynamicElements(response);
 }
 
 function renderClientPicker() {
+    const area = getActiveConversationArea();
     const allClientsWithCounts = getClientsWithJobCounts();
     const keyClients = allClientsWithCounts.filter(c => KEY_CLIENTS.includes(c.code));
     const hasOtherClients = allClientsWithCounts.some(c => !KEY_CLIENTS.includes(c.code));
@@ -550,7 +577,7 @@ function renderClientPicker() {
             <button class="smart-prompt" data-question="What's due today?">What's due?</button>
         </div>
     `;
-    conversationArea.appendChild(response);
+    area.appendChild(response);
     bindDynamicElements(response);
 }
 
@@ -695,14 +722,16 @@ async function submitUpdate(jobNumber, btn) {
 // ===== UI FUNCTIONS =====
 
 function addUserMessage(text) {
+    const area = getActiveConversationArea();
     const msg = document.createElement('div');
     msg.className = 'user-message fade-in';
     msg.textContent = text;
-    conversationArea.appendChild(msg);
-    conversationArea.scrollTop = conversationArea.scrollHeight;
+    area.appendChild(msg);
+    area.scrollTop = area.scrollHeight;
 }
 
 function addThinkingDots() {
+    const area = getActiveConversationArea();
     const dots = document.createElement('div');
     dots.className = 'thinking-dots';
     dots.id = 'currentThinking';
@@ -711,8 +740,8 @@ function addThinkingDots() {
         <div class="thinking-dot"></div>
         <div class="thinking-dot"></div>
     `;
-    conversationArea.appendChild(dots);
-    conversationArea.scrollTop = conversationArea.scrollHeight;
+    area.appendChild(dots);
+    area.scrollTop = area.scrollHeight;
 }
 
 function removeThinkingDots() {
@@ -763,6 +792,7 @@ function bindDynamicElements(container) {
 }
 
 function showOtherClients() {
+    const area = getActiveConversationArea();
     addThinkingDots();
     setTimeout(() => {
         removeThinkingDots();
@@ -787,9 +817,9 @@ function showOtherClients() {
                 <button class="smart-prompt" data-question="Check a client">Back to main clients</button>
             </div>
         `;
-        conversationArea.appendChild(response);
+        area.appendChild(response);
         bindDynamicElements(response);
-        conversationArea.scrollTop = conversationArea.scrollHeight;
+        area.scrollTop = area.scrollHeight;
     }, 400);
 }
 
@@ -812,11 +842,24 @@ function deletePin() {
 }
 
 function updatePinDots() {
+    // Update phone PIN dots
     for (let i = 0; i < 4; i++) {
         const dot = $('dot-' + i);
-        dot.classList.remove('filled', 'error');
-        if (i < enteredPin.length) {
-            dot.classList.add('filled');
+        if (dot) {
+            dot.classList.remove('filled', 'error');
+            if (i < enteredPin.length) {
+                dot.classList.add('filled');
+            }
+        }
+    }
+    // Update landscape PIN dots
+    for (let i = 0; i < 4; i++) {
+        const dot = $('dot-landscape-' + i);
+        if (dot) {
+            dot.classList.remove('filled', 'error');
+            if (i < enteredPin.length) {
+                dot.classList.add('filled');
+            }
         }
     }
 }
@@ -828,8 +871,10 @@ function checkPin() {
         sessionStorage.setItem('dotUser', JSON.stringify(currentUser));
         unlockApp();
     } else {
+        // Show error on both layouts
         $$('.pin-dot').forEach(d => d.classList.add('error'));
-        pinError.classList.add('visible');
+        if (pinError) pinError.classList.add('visible');
+        if (pinErrorLandscape) pinErrorLandscape.classList.add('visible');
         setTimeout(() => {
             enteredPin = '';
             updatePinDots();
@@ -838,8 +883,15 @@ function checkPin() {
 }
 
 function unlockApp() {
-    pinScreen.classList.add('hidden');
-    homeInput.placeholder = `What's cooking ${currentUser.name}?`;
+    // Hide PIN screens on both layouts
+    if (pinScreen) pinScreen.classList.add('hidden');
+    if (pinScreenLandscape) pinScreenLandscape.classList.add('hidden');
+    
+    // Set personalized placeholder on both inputs
+    const placeholder = `What's cooking ${currentUser.name}?`;
+    if (homeInput) homeInput.placeholder = placeholder;
+    if (landscapeInput) landscapeInput.placeholder = placeholder;
+    
     loadClients();
     loadJobs();
 }
@@ -850,7 +902,11 @@ function signOut() {
     currentUser = null;
     enteredPin = '';
     updatePinDots();
-    pinScreen.classList.remove('hidden');
+    
+    // Show PIN screens on both layouts
+    if (pinScreen) pinScreen.classList.remove('hidden');
+    if (pinScreenLandscape) pinScreenLandscape.classList.remove('hidden');
+    
     goHome();
 }
 
@@ -865,42 +921,73 @@ function checkSession() {
 // ===== NAVIGATION =====
 
 function goHome() {
-    homeContent.classList.remove('hidden');
-    conversationView.classList.remove('visible');
-    homeInput.value = '';
-    conversationArea.innerHTML = '';
+    // Phone layout
+    if (homeContent) homeContent.classList.remove('hidden');
+    if (conversationView) conversationView.classList.remove('visible');
+    if (homeInput) homeInput.value = '';
+    if (conversationArea) conversationArea.innerHTML = '';
+    
+    // Landscape layout
+    if (landscapeHome) landscapeHome.classList.remove('hidden');
+    if (landscapeConversation) landscapeConversation.classList.remove('visible');
+    if (landscapeInput) landscapeInput.value = '';
+    if (landscapeConversationArea) landscapeConversationArea.innerHTML = '';
+    if (landscapeFooter) landscapeFooter.classList.remove('hidden');
+    
     loadClients();
     loadJobs();
 }
 
 function startConversation() {
-    const question = homeInput.value.trim() || 'Check a client';
-    homeContent.classList.add('hidden');
-    conversationView.classList.add('visible');
-    addUserMessage(question);
-    processQuestion(question);
+    if (isLandscape()) {
+        // Landscape layout
+        const question = landscapeInput.value.trim() || 'Check a client';
+        landscapeHome.classList.add('hidden');
+        landscapeConversation.classList.add('visible');
+        landscapeFooter.classList.add('hidden');
+        addUserMessage(question);
+        processQuestion(question);
+    } else {
+        // Phone layout
+        const question = homeInput.value.trim() || 'Check a client';
+        homeContent.classList.add('hidden');
+        conversationView.classList.add('visible');
+        addUserMessage(question);
+        processQuestion(question);
+    }
 }
 
 function continueConversation() {
-    const question = chatInput.value.trim();
+    const input = isLandscape() ? landscapeChatInput : chatInput;
+    const question = input.value.trim();
     if (!question) return;
     addUserMessage(question);
-    chatInput.value = '';
+    input.value = '';
     processQuestion(question);
 }
 
 // ===== MENU =====
 
 function toggleMenu() {
-    hamburger.classList.toggle('open');
-    dropdown.classList.toggle('open');
-    overlay.classList.toggle('open');
+    if (isLandscape()) {
+        hamburgerLandscape.classList.toggle('open');
+        dropdownLandscape.classList.toggle('open');
+        overlayLandscape.classList.toggle('open');
+    } else {
+        hamburger.classList.toggle('open');
+        dropdown.classList.toggle('open');
+        overlay.classList.toggle('open');
+    }
 }
 
 function closeMenu() {
-    hamburger.classList.remove('open');
-    dropdown.classList.remove('open');
-    overlay.classList.remove('open');
+    // Close both layouts' menus
+    if (hamburger) hamburger.classList.remove('open');
+    if (dropdown) dropdown.classList.remove('open');
+    if (overlay) overlay.classList.remove('open');
+    if (hamburgerLandscape) hamburgerLandscape.classList.remove('open');
+    if (dropdownLandscape) dropdownLandscape.classList.remove('open');
+    if (overlayLandscape) overlayLandscape.classList.remove('open');
 }
 
 function menuAction(action) {
@@ -960,46 +1047,76 @@ function checkEasterEggs(query) {
 function init() {
     checkSession();
     
-    // PIN keypad
+    // PIN keypad - both layouts
     $$('.pin-key[data-digit]').forEach(key => {
         key.addEventListener('click', () => {
             enterPin(parseInt(key.dataset.digit));
         });
     });
     
-    $('pin-delete').addEventListener('click', deletePin);
+    // PIN delete buttons
+    if ($('pin-delete')) $('pin-delete').addEventListener('click', deletePin);
+    if ($('pin-delete-landscape')) $('pin-delete-landscape').addEventListener('click', deletePin);
     
-    // Menu
-    hamburger.addEventListener('click', toggleMenu);
-    overlay.addEventListener('click', closeMenu);
+    // Menu - phone
+    if (hamburger) hamburger.addEventListener('click', toggleMenu);
+    if (overlay) overlay.addEventListener('click', closeMenu);
     
+    // Menu - landscape
+    if (hamburgerLandscape) hamburgerLandscape.addEventListener('click', toggleMenu);
+    if (overlayLandscape) overlayLandscape.addEventListener('click', closeMenu);
+    
+    // Dropdown items - both layouts
     $$('.dropdown-item').forEach(item => {
         item.addEventListener('click', () => {
             menuAction(item.dataset.action);
         });
     });
     
-    // Home button
-    $('home-btn').addEventListener('click', goHome);
+    // Home buttons
+    if ($('home-btn')) $('home-btn').addEventListener('click', goHome);
+    if ($('home-btn-landscape')) $('home-btn-landscape').addEventListener('click', goHome);
     
-    // Home input
-    homeInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') startConversation();
-    });
+    // Phone home input
+    if (homeInput) {
+        homeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') startConversation();
+        });
+    }
+    if ($('home-send')) $('home-send').addEventListener('click', startConversation);
     
-    $('home-send').addEventListener('click', startConversation);
+    // Landscape home input
+    if (landscapeInput) {
+        landscapeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') startConversation();
+        });
+    }
+    if ($('landscape-send')) $('landscape-send').addEventListener('click', startConversation);
     
-    // Chat input
-    chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') continueConversation();
-    });
+    // Phone chat input
+    if (chatInput) {
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') continueConversation();
+        });
+    }
+    if ($('chat-send')) $('chat-send').addEventListener('click', continueConversation);
     
-    $('chat-send').addEventListener('click', continueConversation);
+    // Landscape chat input
+    if (landscapeChatInput) {
+        landscapeChatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') continueConversation();
+        });
+    }
+    if ($('landscape-chat-send')) $('landscape-chat-send').addEventListener('click', continueConversation);
     
-    // Example buttons
+    // Example buttons - both layouts
     $$('.example-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            homeInput.value = btn.dataset.question;
+            if (isLandscape()) {
+                landscapeInput.value = btn.dataset.question;
+            } else {
+                homeInput.value = btn.dataset.question;
+            }
             startConversation();
         });
     });

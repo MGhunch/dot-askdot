@@ -1118,3 +1118,298 @@ body {
 .fade-in {
     animation: fadeIn 0.4s var(--ease-out);
 }
+
+/* =================================================================
+   LANDSCAPE LAYOUT (Desktop 900px+)
+   ================================================================= */
+
+/* ===== LAYOUT SWITCHING ===== */
+@media (min-width: 900px) {
+    .phone { display: none; }
+    .container-landscape { display: flex; }
+}
+
+.container-landscape {
+    display: none;
+    width: 100%;
+    max-width: 960px;
+    height: 580px;
+    background: var(--white);
+    border-radius: var(--radius-xl);
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 
+        var(--shadow-xl),
+        0 0 0 1px rgba(0,0,0,0.05),
+        inset 0 1px 0 rgba(255,255,255,0.8);
+    position: relative;
+}
+
+/* ===== LANDSCAPE HEADER ===== */
+.landscape-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--grey-100);
+    background: var(--white);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 100;
+}
+
+.landscape-header .header-logo-img {
+    height: 36px;
+    width: auto;
+}
+
+.landscape-hamburger span {
+    background: var(--red);
+}
+
+/* ===== LANDSCAPE MAIN ===== */
+.landscape-main {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    position: relative;
+}
+
+/* ===== LANDSCAPE HOME STATE ===== */
+.landscape-home {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    padding: 40px 60px;
+    gap: 40px;
+}
+
+.landscape-home.hidden {
+    display: none;
+}
+
+.landscape-home-left {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.landscape-hello-img {
+    width: 300px;
+    height: auto;
+    animation: helloAppear 0.6s var(--ease-bounce);
+}
+
+.landscape-home-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-left: 20px;
+}
+
+.landscape-title {
+    font-family: var(--font-body);
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--grey-800);
+    margin-bottom: 28px;
+}
+
+.landscape-input-area {
+    width: 100%;
+    max-width: 440px;
+    position: relative;
+    margin-bottom: 24px;
+}
+
+.landscape-input {
+    width: 100%;
+    padding: 16px 56px 16px 22px;
+    border: 2px solid var(--grey-200);
+    border-radius: var(--radius-full);
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 500;
+    outline: none;
+    transition: all 0.2s var(--ease-out);
+    background: var(--white);
+}
+
+.landscape-input:focus {
+    border-color: var(--red);
+    box-shadow: 0 0 0 4px var(--red-glow);
+}
+
+.landscape-input::placeholder {
+    color: var(--grey-400);
+    font-weight: 400;
+}
+
+.landscape-send {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.landscape-examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* ===== LANDSCAPE CONVERSATION STATE ===== */
+.landscape-conversation {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.landscape-conversation.visible {
+    display: flex;
+}
+
+.landscape-conversation-area {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 28px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+    min-height: 0;
+}
+
+.landscape-conversation-area::-webkit-scrollbar {
+    width: 6px;
+}
+
+.landscape-conversation-area::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.landscape-conversation-area::-webkit-scrollbar-thumb {
+    background: var(--grey-200);
+    border-radius: 3px;
+}
+
+.landscape-conversation-area::-webkit-scrollbar-thumb:hover {
+    background: var(--grey-400);
+}
+
+/* ===== LANDSCAPE CHAT INPUT (replaces footer in conversation) ===== */
+.landscape-chat-input-area {
+    padding: 20px 80px 28px;
+    border-top: 1px solid var(--grey-100);
+    background: var(--white);
+    flex-shrink: 0;
+}
+
+.landscape-chat-input-wrapper {
+    position: relative;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.landscape-chat-input {
+    width: 100%;
+    padding: 16px 56px 16px 22px;
+    border: 2px solid var(--grey-200);
+    border-radius: var(--radius-full);
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 500;
+    outline: none;
+    transition: all 0.2s var(--ease-out);
+}
+
+.landscape-chat-input:focus {
+    border-color: var(--red);
+    box-shadow: 0 0 0 4px var(--red-glow);
+}
+
+.landscape-chat-input::placeholder {
+    color: var(--grey-400);
+    font-weight: 400;
+}
+
+.landscape-chat-send {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.landscape-chat-send:hover {
+    transform: translateY(-50%) scale(1.05);
+}
+
+/* ===== LANDSCAPE FOOTER (home state only) ===== */
+.landscape-footer {
+    padding: 16px 32px;
+    border-top: 1px solid var(--grey-100);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    background: var(--white);
+}
+
+.landscape-footer.hidden {
+    display: none;
+}
+
+.landscape-footer-left {
+    display: flex;
+    align-items: center;
+}
+
+.landscape-footer-logo {
+    height: 24px;
+    width: auto;
+}
+
+.landscape-footer-right {
+    font-size: 13px;
+    color: var(--grey-400);
+}
+
+/* ===== LANDSCAPE MESSAGE STYLES ===== */
+.landscape-conversation-area .user-message {
+    align-self: flex-end;
+    background: var(--red);
+    color: var(--white);
+    padding: 14px 22px;
+    border-radius: 24px 24px 6px 24px;
+    max-width: 60%;
+    font-size: 15px;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(237, 28, 36, 0.2);
+}
+
+.landscape-conversation-area .dot-response {
+    align-self: flex-start;
+    max-width: 75%;
+}
+
+.landscape-conversation-area .dot-text {
+    font-size: 15px;
+    color: var(--grey-800);
+    margin-bottom: 14px;
+    line-height: 1.6;
+}
+
+/* Landscape cards with more breathing room */
+.landscape-conversation-area .client-cards,
+.landscape-conversation-area .job-cards {
+    max-width: 500px;
+}
+
+.landscape-conversation-area .client-card:hover,
+.landscape-conversation-area .job-card:hover {
+    transform: translateX(4px);
+}

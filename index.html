@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- ===== PHONE LAYOUT (Mobile) ===== -->
     <div class="phone">
         <!-- PIN Screen -->
         <div class="pin-screen" id="pin-screen">
@@ -108,6 +109,117 @@
                 </button>
             </div>
         </div>
+    </div>
+
+    <!-- ===== LANDSCAPE LAYOUT (Desktop 900px+) ===== -->
+    <div class="container-landscape">
+        <!-- PIN Screen (Landscape) -->
+        <div class="pin-screen" id="pin-screen-landscape">
+            <div class="pin-logo">
+                <img src="images/Robot.png" alt="Dot">
+            </div>
+            <p class="pin-title">Enter PIN</p>
+            <div class="pin-dots">
+                <div class="pin-dot" id="dot-landscape-0"></div>
+                <div class="pin-dot" id="dot-landscape-1"></div>
+                <div class="pin-dot" id="dot-landscape-2"></div>
+                <div class="pin-dot" id="dot-landscape-3"></div>
+            </div>
+            <div class="pin-keypad">
+                <button class="pin-key" data-digit="1">1</button>
+                <button class="pin-key" data-digit="2">2</button>
+                <button class="pin-key" data-digit="3">3</button>
+                <button class="pin-key" data-digit="4">4</button>
+                <button class="pin-key" data-digit="5">5</button>
+                <button class="pin-key" data-digit="6">6</button>
+                <button class="pin-key" data-digit="7">7</button>
+                <button class="pin-key" data-digit="8">8</button>
+                <button class="pin-key" data-digit="9">9</button>
+                <button class="pin-key empty"></button>
+                <button class="pin-key" data-digit="0">0</button>
+                <button class="pin-key delete" id="pin-delete-landscape">⌫</button>
+            </div>
+            <p class="pin-error-msg" id="pin-error-landscape">PIN not recognised</p>
+        </div>
+
+        <!-- Header -->
+        <header class="landscape-header">
+            <a class="header-logo" id="home-btn-landscape">
+                <img src="images/Askdot-header.png" alt="Ask Dot" class="header-logo-img">
+            </a>
+            <button class="hamburger landscape-hamburger" id="hamburger-landscape">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <nav class="dropdown" id="dropdown-landscape">
+                <div class="dropdown-item" data-action="wip">
+                    <span class="chevron">›</span> Go to WIP
+                </div>
+                <div class="dropdown-item" data-action="tracker">
+                    <span class="chevron">›</span> Go to Tracker
+                </div>
+                <div class="dropdown-item" data-action="about">
+                    <span class="chevron">›</span> About Dot
+                </div>
+                <div class="dropdown-item muted" data-action="signout">
+                    <span class="chevron">›</span> Sign out
+                </div>
+            </nav>
+        </header>
+
+        <div class="overlay" id="overlay-landscape"></div>
+
+        <!-- Main Content Area -->
+        <div class="landscape-main">
+            <!-- Home State (Two columns) -->
+            <div class="landscape-home" id="landscape-home">
+                <div class="landscape-home-left">
+                    <img src="images/Dotandhello.png" alt="Hello from Dot" class="landscape-hello-img">
+                </div>
+                <div class="landscape-home-right">
+                    <h1 class="landscape-title">How can we help?</h1>
+                    <div class="landscape-input-area">
+                        <input type="text" class="landscape-input" id="landscape-input" placeholder="What's cooking?">
+                        <button class="input-send landscape-send" id="landscape-send">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="send-icon">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="landscape-examples">
+                        <button class="example-btn" data-question="Find a job">Find a job</button>
+                        <button class="example-btn" data-question="Check a client">Check a client</button>
+                        <button class="example-btn" data-question="What can Dot do?">What can Dot do?</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Conversation State -->
+            <div class="landscape-conversation" id="landscape-conversation">
+                <div class="landscape-conversation-area" id="landscape-conversation-area"></div>
+                <div class="landscape-chat-input-area">
+                    <div class="landscape-chat-input-wrapper">
+                        <input type="text" class="landscape-chat-input" id="landscape-chat-input" placeholder="Ask a follow-up...">
+                        <button class="input-send landscape-chat-send" id="landscape-chat-send">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="send-icon">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer (Home state only) -->
+        <footer class="landscape-footer" id="landscape-footer">
+            <div class="landscape-footer-left">
+                <img src="images/ai2-logo.png" alt="ai²" class="landscape-footer-logo">
+            </div>
+            <div class="landscape-footer-right">Agency Intuition × Artificial Intelligence</div>
+        </footer>
     </div>
 
     <script src="app.js"></script>
