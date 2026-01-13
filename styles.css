@@ -1127,8 +1127,8 @@ body {
 .container-landscape {
     display: none;
     width: 100%;
-    max-width: 960px;
-    height: 580px;
+    max-width: 1100px;
+    height: 640px;
     background: var(--white);
     border-radius: var(--radius-xl);
     flex-direction: column;
@@ -1277,7 +1277,7 @@ body {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 28px 80px;
+    padding: 28px 40px;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -1304,7 +1304,7 @@ body {
 
 /* ===== LANDSCAPE CHAT INPUT (replaces footer in conversation) ===== */
 .landscape-chat-input-area {
-    padding: 20px 80px 28px;
+    padding: 20px 40px 28px;
     border-top: 1px solid var(--grey-100);
     background: var(--white);
     flex-shrink: 0;
@@ -1312,8 +1312,7 @@ body {
 
 .landscape-chat-input-wrapper {
     position: relative;
-    max-width: 600px;
-    margin: 0 auto;
+    max-width: 550px;
 }
 
 .landscape-chat-input {
@@ -1407,7 +1406,12 @@ body {
 /* Landscape cards with more breathing room */
 .landscape-conversation-area .client-cards,
 .landscape-conversation-area .job-cards {
-    max-width: 500px;
+    max-width: 550px;
+}
+
+.landscape-conversation-area .client-card,
+.landscape-conversation-area .job-card {
+    max-width: 100%;
 }
 
 .landscape-conversation-area .client-card:hover,
