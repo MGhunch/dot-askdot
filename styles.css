@@ -1123,12 +1123,7 @@ body {
    LANDSCAPE LAYOUT (Desktop 900px+)
    ================================================================= */
 
-/* ===== LAYOUT SWITCHING ===== */
-@media (min-width: 900px) {
-    .phone { display: none; }
-    .container-landscape { display: flex; }
-}
-
+/* ===== LANDSCAPE CONTAINER ===== */
 .container-landscape {
     display: none;
     width: 100%;
@@ -1143,6 +1138,12 @@ body {
         0 0 0 1px rgba(0,0,0,0.05),
         inset 0 1px 0 rgba(255,255,255,0.8);
     position: relative;
+}
+
+/* ===== LAYOUT SWITCHING ===== */
+@media (min-width: 900px) {
+    .phone { display: none; }
+    .container-landscape { display: flex; }
 }
 
 /* ===== LANDSCAPE HEADER ===== */
